@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { configuredProviderSummary } from "@/lib/ai/llm";
 import { handle, requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
@@ -10,6 +11,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 /** What is configured on the server (never returns secret values). */
 export async function GET() {
+  await connection();
   return handle(async () => {
     await requireUser();
     let usage: { provider: string; period: string; count: number }[] = [];

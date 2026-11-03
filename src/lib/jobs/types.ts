@@ -90,3 +90,17 @@ export type WatchCompany = {
 };
 
 export type JobStatus = "new" | "saved" | "applied" | "interviewing" | "offer" | "rejected" | "archived";
+
+export type JobAnalysis = {
+  fit_score: number;
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  resume_bullets: string[];
+  keywords: string[];
+  cover_letter: string;
+  interview_prep: string[];
+  questions_to_ask: string[];
+  generated_at: string;
+  provider?: string;
+};
