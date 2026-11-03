@@ -18,7 +18,7 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
       onClick={onOpen}
       className={cn(
         "group relative cursor-pointer rounded-xl border border-line bg-panel p-4 transition-all duration-150 hover:-translate-y-[1px] hover:border-line-strong hover:shadow-card",
-        fresh && "ring-1 ring-accent/25",
+        fresh && "border-accent/30",
       )}
     >
       <div className="flex items-start gap-3">

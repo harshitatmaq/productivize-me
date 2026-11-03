@@ -123,7 +123,9 @@ async function tickUser(admin: SupabaseClient, p: Profile, now: Date, done: stri
     .limit(50);
   for (const r of rems ?? []) {
     const rule = r as ReminderRule & { id: string; title: string; notes: string | null; next_fire_at: string | null; url: string | null };
-    if (rule.next_fire_at) {
+    const due = !!rule.next_fire_at && Date.parse(rule.next_fire_at) <= now.getTime();
+    if (rule.next_fire_at && !due) continue; // not due yet (defensive; the query already filters)
+    if (due) {
       const res = await notify(p, {
         kind: "reminder",
         dedupeKey: `rem:${rule.id}:${rule.next_fire_at}`,
@@ -139,7 +141,7 @@ async function tickUser(admin: SupabaseClient, p: Profile, now: Date, done: stri
       .from("reminders")
       .update({
         next_fire_at: next?.toISOString() ?? null,
-        last_fired_at: rule.next_fire_at ? nowIso : undefined,
+        last_fired_at: due ? nowIso : undefined,
         active: next !== null,
       })
       .eq("id", rule.id);

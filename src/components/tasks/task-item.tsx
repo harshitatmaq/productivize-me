@@ -106,7 +106,7 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
         ) : null}
         <Menu
           trigger={
-            <button className="rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg" aria-label="More">
+            <button className="hidden rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg sm:block" aria-label="More">
               <MoreHorizontal className="h-3.5 w-3.5" />
             </button>
           }

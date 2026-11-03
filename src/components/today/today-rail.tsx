@@ -5,7 +5,7 @@ import { ArrowUpRight, BellRing, Briefcase, Flame, GraduationCap } from "lucide-
 import Link from "next/link";
 import { useMemo } from "react";
 import { ProgressRing } from "@/components/ui/misc";
-import { useToday } from "@/lib/hooks";
+import { useNow, useToday } from "@/lib/hooks";
 import { sb } from "@/lib/queries/client";
 import { useProfile } from "@/lib/queries/profile";
 import { useReminders } from "@/lib/queries/reminders";
@@ -35,6 +35,7 @@ function Widget({ title, icon, href, children }: { title: string; icon: React.Re
 
 export function TodayRail() {
   const today = useToday();
+  const now = useNow(60_000);
   const { data: tasks = [] } = useTasks();
   const { data: profile } = useProfile();
   const { data: reminders = [] } = useReminders();
@@ -171,7 +172,12 @@ export function TodayRail() {
               <li key={r.id} className="flex items-center justify-between gap-2 text-[13px]">
                 <span className="truncate text-fg-2">{r.title}</span>
                 <span className="shrink-0 text-[11.5px] text-muted">
-                  {new Date(r.next_fire_at!).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                  {new Date(r.next_fire_at!).toLocaleString(
+                    undefined,
+                    Date.parse(r.next_fire_at!) - now > 6 * 86_400_000
+                      ? { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }
+                      : { weekday: "short", hour: "numeric", minute: "2-digit" },
+                  )}
                 </span>
               </li>
             ))}

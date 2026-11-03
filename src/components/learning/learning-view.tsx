@@ -155,6 +155,7 @@ export function LearningView() {
   const [recap, setRecap] = useState<Recap | null>(null);
   const [recapLoading, setRecapLoading] = useState(false);
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [visible, setVisible] = useState(20);
 
   const blank = (): Draft => ({ entry_date: today, title: "", content: "", tags: [], minutes: null, confidence: null, questions: "", resources: [] });
 
@@ -206,9 +207,9 @@ export function LearningView() {
   );
   const grouped = useMemo(() => {
     const g = new Map<string, LearningEntry[]>();
-    filtered.forEach((e) => g.set(e.entry_date, [...(g.get(e.entry_date) ?? []), e]));
+    filtered.slice(0, visible).forEach((e) => g.set(e.entry_date, [...(g.get(e.entry_date) ?? []), e]));
     return [...g.entries()];
-  }, [filtered]);
+  }, [filtered, visible]);
 
   const submit = () => {
     if (!draft || !draft.title.trim()) return toast.error("Give it a short title — what was the topic?");
@@ -266,8 +267,8 @@ export function LearningView() {
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex items-center gap-3 p-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Card className="flex items-center gap-3 p-3 sm:p-4">
           <ProgressRing value={stats.weekDays / goal} size={46} stroke={4} color={stats.weekDays >= goal ? "var(--success)" : "var(--accent)"}>
             <span className="text-[12px] font-semibold tabular-nums">
               {stats.weekDays}/{goal}
@@ -280,7 +281,7 @@ export function LearningView() {
             </div>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 p-4">
+        <Card className="flex items-center gap-3 p-3 sm:p-4">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-p2/12 text-p2">
             <Flame className="h-5 w-5" />
           </span>
@@ -289,7 +290,7 @@ export function LearningView() {
             <div className="text-[12px] text-muted">day streak</div>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 p-4">
+        <Card className="flex items-center gap-3 p-3 sm:p-4">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
             <BookOpenCheck className="h-5 w-5" />
           </span>
@@ -298,7 +299,7 @@ export function LearningView() {
             <div className="text-[12px] text-muted">entries total</div>
           </div>
         </Card>
-        <Card className="flex items-center gap-3 p-4">
+        <Card className="flex items-center gap-3 p-3 sm:p-4">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-success/12 text-success">
             <Clock className="h-5 w-5" />
           </span>
@@ -328,8 +329,8 @@ export function LearningView() {
           ) : null}
 
           <Card className="p-4">
-            <SectionTitle>Last 20 weeks</SectionTitle>
-            <Heatmap counts={stats.counts} today={today} weekStartsOn={profile?.week_starts_on ?? 1} />
+            <SectionTitle>Last 26 weeks</SectionTitle>
+            <Heatmap counts={stats.counts} today={today} weeks={26} weekStartsOn={profile?.week_starts_on ?? 1} />
           </Card>
 
           <div>
@@ -379,6 +380,13 @@ export function LearningView() {
                     </div>
                   </section>
                 ))}
+                {filtered.length > visible ? (
+                  <div className="flex justify-center">
+                    <Button variant="secondary" onClick={() => setVisible((v) => v + 20)}>
+                      Show older ({filtered.length - visible} more)
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

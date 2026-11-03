@@ -180,7 +180,6 @@ function MobileBar() {
   const { openQuickAdd } = useUi();
   const [more, setMore] = useState(false);
   const primary = ["/", "/calendar", "/jobs", "/learning"];
-  const current = NAV.find((n) => isActive(pathname, n.href));
   const onMorePage = !primary.some((p) => isActive(pathname, p));
 
   return (
@@ -188,7 +187,7 @@ function MobileBar() {
       {/* top bar */}
       <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-bg/85 px-4 pb-2 pt-[max(env(safe-area-inset-top),8px)] backdrop-blur-xl md:hidden">
         <LogoMark className="h-5 w-5" />
-        <span className="flex-1 text-[15px] font-semibold text-fg">{current?.label ?? "Productivize"}</span>
+        <span className="flex-1 text-[14px] font-semibold tracking-[-0.01em] text-fg">Productivize</span>
         <NotificationBell />
         <UserMenu compact />
       </header>

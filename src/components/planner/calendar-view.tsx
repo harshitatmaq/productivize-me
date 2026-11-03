@@ -73,7 +73,8 @@ export function CalendarView() {
     return map;
   }, [tasks]);
 
-  const remindersOn = (d: string) => reminders.filter((r) => r.active && occursOn(r, d) && d >= r.start_date);
+  // Upcoming occurrences only — past ones already fired and would just add noise.
+  const remindersOn = (d: string) => (d < today ? [] : reminders.filter((r) => r.active && occursOn(r, d) && d >= r.start_date));
 
   const shift = (delta: number) => {
     const d = new Date(y, m - 1 + delta, 1);

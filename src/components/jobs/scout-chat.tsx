@@ -30,7 +30,10 @@ export function ScoutChat({ row, onFinalized }: { row: JobProfileRow | null | un
   const progress = last?.progress ?? 0;
   const ready = row?.status === "ready";
 
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [chat.length, busy]);
+  useEffect(() => {
+    // Block body on purpose: newer browsers return a Promise from scrollIntoView, which must not become the cleanup.
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [chat.length, busy]);
 
   const send = async (message?: string, restart = false) => {
     if (busy) return;

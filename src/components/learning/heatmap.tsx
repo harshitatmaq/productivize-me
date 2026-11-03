@@ -11,8 +11,12 @@ export function Heatmap({ counts, today, weeks = 20, weekStartsOn = 1 }: { count
   const months: { idx: number; label: string }[] = [];
   cols.forEach((c, i) => {
     const firstOfMonth = c.find((d) => d.endsWith("-01"));
-    if (firstOfMonth || i === 0) months.push({ idx: i, label: new Date(`${(firstOfMonth ?? c[0])}T12:00:00`).toLocaleDateString(undefined, { month: "short" }) });
+    if (firstOfMonth) months.push({ idx: i, label: new Date(`${firstOfMonth}T12:00:00`).toLocaleDateString(undefined, { month: "short" }) });
   });
+  // Label the first column too, unless a month label follows too closely to fit.
+  if (!months.length || months[0].idx >= 3) {
+    months.unshift({ idx: 0, label: new Date(`${cols[0][0]}T12:00:00`).toLocaleDateString(undefined, { month: "short" }) });
+  }
   return (
     <div className="overflow-x-auto no-scrollbar">
       <div className="inline-block">

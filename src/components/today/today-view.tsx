@@ -106,12 +106,14 @@ export function TodayView() {
         </div>
 
         {overdue.length > 0 ? (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-danger/25 bg-danger/[0.06] px-3.5 py-2.5 animate-fade-in">
-            <AlertCircle className="h-4 w-4 shrink-0 text-danger" />
-            <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-              <span className="font-medium text-fg">{plural(overdue.length, "task")}</span> left unfinished from earlier days.
+          <div className="mb-3 flex flex-col gap-2.5 rounded-xl border border-danger/25 bg-danger/[0.06] px-3.5 py-2.5 animate-fade-in sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3 text-[13px] text-fg-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-danger" />
+              <span>
+                <span className="font-medium text-fg">{plural(overdue.length, "task")}</span> left unfinished from earlier days.
+              </span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => setReviewOpen(true)}>
                 Review
               </Button>
@@ -123,12 +125,14 @@ export function TodayView() {
         ) : null}
 
         {wrapUp ? (
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-accent/25 bg-accent-soft px-3.5 py-2.5 animate-fade-in">
-            <Moon className="h-4 w-4 shrink-0 text-accent" />
-            <div className="min-w-0 flex-1 text-[13px] text-fg-2">
-              Day&apos;s wrapping up — <span className="font-medium text-fg">{plural(open.length, "task")}</span> still open.
+          <div className="mb-3 flex flex-col gap-2.5 rounded-xl border border-accent/25 bg-accent-soft px-3.5 py-2.5 animate-fade-in sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3 text-[13px] text-fg-2">
+              <Moon className="h-4 w-4 shrink-0 text-accent" />
+              <span>
+                Day&apos;s wrapping up — <span className="font-medium text-fg">{plural(open.length, "task")}</span> still open.
+              </span>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => setReviewOpen(true)}>
                 Review
               </Button>
