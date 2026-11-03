@@ -103,6 +103,8 @@ function UserMenu({ compact }: { compact?: boolean }) {
         icon={<LogOut className="h-3.5 w-3.5" />}
         onSelect={async () => {
           await sb().auth.signOut();
+          // Full reload on purpose: clears every cached query from the previous session.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.assign("/login");
         }}
       >

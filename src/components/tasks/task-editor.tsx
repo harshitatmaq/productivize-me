@@ -1,7 +1,7 @@
 "use client";
 
 import { AlarmClock, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useResettableState } from "@/lib/hooks";
 import { toast } from "sonner";
 import { useUi } from "@/components/shell/ui-store";
 import { Button } from "@/components/ui/button";
@@ -34,17 +34,9 @@ export function TaskEditor() {
   const { editing, editTask } = useUi();
   const update = useUpdateTask();
   const del = useDeleteTask();
-  const [draft, setDraft] = useState<Task | null>(editing);
-  const [mode, setMode] = useState<ReminderMode>("none");
-  const [custom, setCustom] = useState("");
-
-  useEffect(() => {
-    setDraft(editing);
-    if (editing) {
-      setMode(reminderMode(editing));
-      setCustom(toLocalInput(editing.reminder_at));
-    }
-  }, [editing]);
+  const [draft, setDraft] = useResettableState<Task | null, Task | null>(editing, (t) => t);
+  const [mode, setMode] = useResettableState<ReminderMode, Task | null>(editing, (t) => (t ? reminderMode(t) : "none"));
+  const [custom, setCustom] = useResettableState(editing, (t) => toLocalInput(t?.reminder_at ?? null));
 
   if (!draft) return null;
   const set = <K extends keyof Task>(k: K, v: Task[K]) => setDraft((d) => (d ? { ...d, [k]: v } : d));

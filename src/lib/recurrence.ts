@@ -11,6 +11,10 @@ export type ReminderRule = {
   start_date: string; // YYYY-MM-DD; for "once" this is the date it fires
 };
 
+export function occursOn(rule: ReminderRule, dateStr: string): boolean {
+  return matchesDay(rule, dateStr);
+}
+
 function matchesDay(rule: ReminderRule, dateStr: string): boolean {
   const wd = weekdayOf(dateStr);
   const { y, m, d } = parseDateStr(dateStr);

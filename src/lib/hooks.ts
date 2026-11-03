@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 import { todayStr } from "@/lib/time";
 
 /** Current local date (YYYY-MM-DD), updating at midnight and when the tab regains focus. */
@@ -51,16 +51,54 @@ export function useHotkey(key: string, handler: (e: KeyboardEvent) => void, opts
   }, [key, handler, opts.meta]);
 }
 
-const subscribeMq = (q: string) => (cb: () => void) => {
-  const mq = window.matchMedia(q);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
-};
-
 export function useMediaQuery(q: string, serverValue = false): boolean {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const subscribe = useCallback(subscribeMq(q), [q]);
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      const mq = window.matchMedia(q);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    [q],
+  );
   return useSyncExternalStore(subscribe, () => window.matchMedia(q).matches, () => serverValue);
+}
+
+/** Epoch ms, refreshed every `intervalMs` (keeps render pure). */
+export function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+/**
+ * Local state initialised from `source`, and re-initialised whenever `source`
+ * changes identity (React's "adjust state when a prop changes" pattern).
+ */
+export function useResettableState<T, S>(source: S, init: (s: S) => T): [T, Dispatch<SetStateAction<T>>] {
+  const [state, setState] = useState(() => init(source));
+  const [prev, setPrev] = useState(source);
+  if (prev !== source) {
+    setPrev(source);
+    setState(init(source));
+  }
+  return [state, setState];
+}
+
+/**
+ * Runs `onTrigger` once each time `value` becomes truthy (e.g. a `?new=1` deep link),
+ * during render rather than in an effect.
+ */
+export function useTrigger(value: string | null, onTrigger: () => void) {
+  const [handled, setHandled] = useState<string | null>(null);
+  if (value && value !== handled) {
+    setHandled(value);
+    onTrigger();
+  } else if (!value && handled) {
+    setHandled(null);
+  }
 }
 
 export function useIsStandalone(): boolean {
