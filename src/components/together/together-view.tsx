@@ -69,7 +69,9 @@ function PersonCard({ p }: { p: BuddyStats }) {
         />
         <Stat icon={<Flame className="h-3.5 w-3.5 text-p2" />} label="Learning streak" value={`${p.learning_streak}d`} />
         <Stat icon={<Send className="h-3.5 w-3.5 text-p3" />} label="Applications" value={p.applications_week} sub="this week" />
-        <Stat icon={<Timer className="h-3.5 w-3.5 text-warning" />} label="Focus" value={formatMinutes(p.focus_minutes_week)} sub="this week" />
+        <div className="col-span-2">
+          <Stat icon={<Timer className="h-3.5 w-3.5 text-warning" />} label="Focus" value={formatMinutes(p.focus_minutes_week)} sub="this week" />
+        </div>
       </div>
       {!p.is_me ? (
         <div className="mt-4 flex gap-2">
