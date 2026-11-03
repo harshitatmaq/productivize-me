@@ -1,6 +1,8 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link2, Plus } from "lucide-react";
+import { api } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,30 @@ export function TrackerBoard({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) =
   const [over, setOver] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: "", company: "", url: "", status: "applied" as Job["status"], location: "" });
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const qc = useQueryClient();
+
+  const importLink = async () => {
+    if (!/^https?:\/\//.test(importUrl.trim())) return toast.error("Paste a full link starting with https://");
+    setImporting(true);
+    try {
+      const status = form.status === "saved" ? "saved" : "applied";
+      const r = await api<{ job: Job; duplicate?: boolean; extracted: boolean }>("/api/jobs/import", { json: { url: importUrl.trim(), status } });
+      if (form.status !== status && !r.duplicate) update.mutate({ id: r.job.id, patch: { status: form.status } });
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(r.duplicate ? "Already on your board" : `Added: ${r.job.title}${r.job.company ? ` @ ${r.job.company}` : ""}`, {
+        description: r.extracted ? (r.job.score != null ? `Match score ${r.job.score}` : undefined) : "Couldn't read the page fully — edit the details if needed.",
+      });
+      setImportUrl("");
+      setAdding(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const move = (id: string, status: Job["status"]) => {
     const job = jobs.find((j) => j.id === id);
@@ -158,6 +184,18 @@ export function TrackerBoard({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) =
         }
       >
         <div className="space-y-3">
+          <div className="rounded-xl border border-accent/25 bg-accent-soft/40 p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-medium text-fg">
+              <Link2 className="h-3.5 w-3.5 text-accent" /> Paste a job link — Scout reads it, fills the details and scores it
+            </div>
+            <div className="flex gap-2">
+              <Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://www.linkedin.com/jobs/view/…" onKeyDown={(e) => e.key === "Enter" && importLink()} />
+              <Button variant="primary" onClick={importLink} loading={importing}>
+                Import
+              </Button>
+            </div>
+          </div>
+          <div className="text-center text-[11.5px] text-faint">— or enter it by hand —</div>
           <Field label="Job title">
             <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Senior Backend Engineer" autoFocus />
           </Field>

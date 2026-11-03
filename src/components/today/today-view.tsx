@@ -15,6 +15,7 @@ import { useProfile } from "@/lib/queries/profile";
 import { useCarryTasks, useTasks } from "@/lib/queries/tasks";
 import { minutesOf } from "@/lib/time";
 import { cn, plural } from "@/lib/utils";
+import { PlanDay } from "./plan-day";
 import { TodayRail } from "./today-rail";
 
 function greeting(minutes: number) {
@@ -143,7 +144,14 @@ export function TodayView() {
           </div>
         ) : null}
 
-        <QuickAdd defaultDate={today} className="mb-5" />
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start">
+          <QuickAdd defaultDate={today} className="flex-1" />
+          {open.length + overdue.length >= 2 ? (
+            <div className="flex justify-end sm:pt-2">
+              <PlanDay />
+            </div>
+          ) : null}
+        </div>
 
         {isLoading ? (
           <div className="space-y-3 px-2">

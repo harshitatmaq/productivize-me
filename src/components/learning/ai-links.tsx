@@ -1,6 +1,7 @@
 "use client";
 
-import { ExternalLink, MessageCircle, Sparkle } from "lucide-react";
+import { Copy, ExternalLink, MessageCircle, Sparkle } from "lucide-react";
+import { toast } from "sonner";
 import type { LearningEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,21 @@ export function AiLinkButtons({ prompt, className, size = "md" }: { prompt?: str
       <a href={claudeUrl(prompt)} target="_blank" rel="noreferrer" className={cn(base, "border-[#d97757]/35 bg-[#d97757]/10 text-[#c2410c] hover:bg-[#d97757]/15 dark:text-[#e8916f]")}>
         <Sparkle className="h-3.5 w-3.5" /> Claude <ExternalLink className="h-3 w-3 opacity-70" />
       </a>
+      {prompt ? (
+        <button
+          type="button"
+          onClick={() =>
+            navigator.clipboard
+              .writeText(prompt)
+              .then(() => toast.success("Prompt copied — paste it into any AI chat"))
+              .catch(() => toast.error("Couldn't copy"))
+          }
+          className={cn(base, "border-line text-muted hover:border-line-strong hover:text-fg")}
+          title="Copy the prompt (works even if pre-filled links stop working)"
+        >
+          <Copy className="h-3.5 w-3.5" /> Copy prompt
+        </button>
+      ) : null}
     </div>
   );
 }

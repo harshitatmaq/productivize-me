@@ -12,6 +12,7 @@ import { EMPTY_PORTFOLIO, normalizePortfolio, type PortfolioData } from "@/lib/p
 import { useProfile } from "@/lib/queries/profile";
 import { usePortfolio, useSavePortfolio } from "@/lib/queries/portfolio";
 import { api, cn } from "@/lib/utils";
+import { ResumeButton } from "@/components/jobs/resume-pdf";
 import { PortfolioView } from "./portfolio-view";
 
 function Block({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) {
@@ -126,6 +127,7 @@ export function PortfolioEditor() {
         subtitle="Your professional home page. Edit on the left, see it live on the right, publish with one switch."
         right={
           <>
+            <ResumeButton variant="secondary" label="Resume PDF" disabled={dirty} title={dirty ? "Save first" : undefined} />
             <Button variant="secondary" onClick={generate} loading={generating}>
               <Sparkles className="h-4 w-4" /> Draft from my job profile
             </Button>

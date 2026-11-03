@@ -3,8 +3,12 @@ import "server-only";
 import { envInt } from "@/lib/env";
 import { notify, type NotifyProfile } from "@/lib/notify";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { toPgVector } from "@/lib/ai/embeddings";
 import { dedupeKey, domainOf, hash, normalizeUrl, relevance } from "./normalize";
+import { discoverBoards, type DiscoveryLog } from "./discover";
+import { fetchFullDescription } from "./enrich";
 import { buildSearchPlan } from "./profile";
+import { feedbackContext, semanticRank, type Candidate } from "./rank";
 import { scoreJobs } from "./scoring";
 import { JOB_SOURCES } from "./sources";
 import type { JobProfile, RawJob, SearchPlan, WatchCompany } from "./types";
@@ -33,6 +37,8 @@ type JobProfileRow = {
   disabled_sources: string[];
   last_search_at: string | null;
   profile_updated_at: string | null;
+  profile_embedding: { model: string; hash: string; vector: number[] } | null;
+  ats_discovery: DiscoveryLog | null;
 };
 
 const PLAN_MAX_AGE_MS = 24 * 3_600_000;
@@ -98,6 +104,17 @@ export async function runJobSearch(
       log(`search plan refreshed: ${plan.titles.join(", ")}`);
     }
 
+    // 1b. Find public job boards for "dream companies" (each company is probed once; misses retried monthly)
+    let watch = jp.watch_companies ?? [];
+    if (jp.profile.target_companies?.length) {
+      const { log: dlog, found } = await discoverBoards(jp.profile.target_companies, jp.ats_discovery ?? {}, watch);
+      if (found.length || Object.keys(dlog).length !== Object.keys(jp.ats_discovery ?? {}).length) {
+        watch = [...watch, ...found];
+        await admin.from("job_profiles").update({ ats_discovery: dlog, watch_companies: watch }).eq("user_id", userId);
+        if (found.length) log(`found career boards: ${found.map((f) => `${f.name} (${f.ats})`).join(", ")}`);
+      }
+    }
+
     // 2. Fetch from every source that is due
     const stateKeys = JOB_SOURCES.map((s) => `${userId}:${s.id}`);
     const { data: states } = await admin.from("source_state").select("*").in("key", stateKeys);
@@ -113,7 +130,7 @@ export async function runJobSearch(
         stats.sources[s.id] = { fetched: 0, skipped: "no API key" };
         return false;
       }
-      if (s.id === "ats" && !(jp.watch_companies ?? []).length) {
+      if (s.id === "ats" && !watch.length) {
         stats.sources[s.id] = { fetched: 0, skipped: "no watched companies" };
         return false;
       }
@@ -131,7 +148,7 @@ export async function runJobSearch(
       due.map(async (s) => {
         const st = stateMap.get(`${userId}:${s.id}`);
         const cursor = Number((st?.data as { cursor?: number })?.cursor ?? 0);
-        const jobs = await s.fetch({ plan, watch: jp.watch_companies ?? [], manual, cursor, log });
+        const jobs = await s.fetch({ plan, watch, manual, cursor, log });
         await admin.from("source_state").upsert({
           key: `${userId}:${s.id}`,
           last_run_at: new Date().toISOString(),
@@ -178,16 +195,36 @@ export async function runJobSearch(
     const fresh = unique.filter((j) => !known.has(`u:${j.url_hash}`) && !known.has(`d:${j.dedupe_key}`));
     stats.fresh = fresh.length;
 
-    // 5. Cheap relevance filter, then LLM scoring for the most promising
+    // 5. Keyword pre-filter → semantic re-rank (embeddings + your 👍/👎) → full descriptions → LLM scoring
     const maxScore = envInt("JOBS_MAX_SCORED_PER_RUN", manual ? 40 : 32);
     const minRel = Number(process.env.JOBS_MIN_RELEVANCE ?? 0.3);
-    const ranked = fresh
+    const keywordPool: Candidate[] = fresh
       .map((job) => ({ job, rel: job.needs_extraction ? Math.max(relevance(job, plan, jp.profile), 0.45) : relevance(job, plan, jp.profile) }))
-      .filter((x) => x.rel >= minRel)
+      .filter((x) => x.rel >= minRel * 0.6)
       .sort((a, b) => b.rel - a.rel)
-      .slice(0, maxScore);
+      .slice(0, 120);
+    const { ranked: reranked, model: embeddingModel } = await semanticRank(admin, userId, jp.profile, jp.profile_embedding, keywordPool, log);
+    const ranked = reranked.filter((x) => x.rel >= minRel).slice(0, maxScore);
 
-    const { scored, dropped, providers } = await scoreJobs(jp.profile, ranked, log);
+    const enrichCount = envInt("JOBS_ENRICH_PER_RUN", manual ? 10 : 8);
+    const toEnrich = ranked.slice(0, enrichCount).filter((c) => (c.job.description ?? "").length < 1200);
+    let enriched = 0;
+    for (let i = 0; i < toEnrich.length; i += 4) {
+      await Promise.all(
+        toEnrich.slice(i, i + 4).map(async (c) => {
+          const full = await fetchFullDescription(c.job.url);
+          if (full && full.length > (c.job.description ?? "").length) {
+            c.job.description = full;
+            enriched++;
+          }
+        }),
+      );
+    }
+    if (enriched) log(`fetched full descriptions for ${enriched} jobs`);
+
+    const preferences = await feedbackContext(admin, userId);
+    const vectorFor = new Map(ranked.map((c) => [c.job.url, c]));
+    const { scored, dropped, providers } = await scoreJobs(jp.profile, ranked, log, 8, preferences);
     stats.scored = scored.length;
     stats.dropped = dropped;
     stats.providers = providers;
@@ -220,6 +257,9 @@ export async function runJobSearch(
           concerns: j.concerns,
           tags: (j.tags ?? []).slice(0, 10),
           status: j.score < 35 ? "archived" : "new",
+          embedding: vectorFor.get(j.url)?.vector && embeddingModel ? toPgVector(vectorFor.get(j.url)!.vector!) : null,
+          embedding_model: vectorFor.get(j.url)?.vector ? (embeddingModel ?? null) : null,
+          semantic_score: vectorFor.get(j.url)?.semantic ?? null,
         };
       });
       const { data: inserted, error } = await admin

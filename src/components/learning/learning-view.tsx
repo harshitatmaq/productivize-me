@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, Brain, ChevronDown, Clock, Flame, GraduationCap, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { BookOpenCheck, Brain, ChevronDown, Clock, Flame, GraduationCap, Layers, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -11,7 +11,10 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { Markdown } from "@/components/ui/markdown";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { Badge, Card, EmptyState, PageHeader, ProgressRing, SectionTitle } from "@/components/ui/misc";
-import { useNow, useToday, useTrigger } from "@/lib/hooks";
+import { useToday, useTrigger } from "@/lib/hooks";
+import { useGenerateCards } from "@/lib/queries/flashcards";
+import { AddCardDialog, FlashcardsPanel, ReviewDialog } from "./flashcards";
+import { LearningSuggestions } from "./suggestions";
 import { useDeleteLearning, useLearning, useSaveLearning } from "@/lib/queries/learning";
 import { useProfile } from "@/lib/queries/profile";
 import { addDays, diffDays, startOfWeek } from "@/lib/time";
@@ -35,7 +38,6 @@ type Draft = {
 
 type Recap = { summary: string; themes: string[]; gaps: string[]; next_steps: string[]; quiz: { q: string; a: string }[] };
 
-const REVIEW_INTERVALS = [1, 3, 7, 14, 30];
 
 function Confidence({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
   const labels = ["Lost", "Shaky", "Okay", "Solid", "Could teach it"];
@@ -57,6 +59,13 @@ function Confidence({ value, onChange }: { value: number | null; onChange: (v: n
 
 function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
   const del = useDeleteLearning();
+  const gen = useGenerateCards();
+  const [addingCard, setAddingCard] = useState(false);
+  const makeCards = () =>
+    gen.mutate(e.id, {
+      onSuccess: (r) => toast.success(`${r.cards.length} flashcards created — review them now or later`),
+      onError: (err) => toast.error((err as Error).message),
+    });
   const [open, setOpen] = useState(false);
   const long = (e.content ?? "").length > 280;
   return (
@@ -102,6 +111,13 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
             </MenuItem>
           ))}
           <MenuSeparator />
+          <MenuItem icon={<Layers className="h-3.5 w-3.5" />} onSelect={makeCards} disabled={gen.isPending}>
+            {gen.isPending ? "Making flashcards…" : "Make flashcards (AI)"}
+          </MenuItem>
+          <MenuItem icon={<Plus className="h-3.5 w-3.5" />} onSelect={() => setAddingCard(true)}>
+            Add a flashcard
+          </MenuItem>
+          <MenuSeparator />
           <MenuItem icon={<Pencil className="h-3.5 w-3.5" />} onSelect={onEdit}>
             Edit
           </MenuItem>
@@ -121,6 +137,7 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
           <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} /> {open ? "Less" : "More"}
         </button>
       ) : null}
+      <AddCardDialog open={addingCard} onOpenChange={setAddingCard} entryId={e.id} />
       {e.questions ? (
         <div className="mt-2.5 rounded-lg bg-warning/8 px-3 py-2 text-[12.5px] text-fg-2">
           <span className="font-medium text-warning">Open questions · </span>
@@ -159,13 +176,23 @@ export function LearningView() {
 
   const blank = (): Draft => ({ entry_date: today, title: "", content: "", tags: [], minutes: null, confidence: null, questions: "", resources: [] });
 
+  const [reviewing, setReviewing] = useState(false);
+  const wantsReview = params.get("review");
+  useTrigger(wantsReview, () => setReviewing(true));
+  useEffect(() => {
+    if (wantsReview) router.replace("/learning");
+  }, [wantsReview, router]);
+
   // Deep link from the learning nudge notification: /learning?new=1
   const wantsNew = params.get("new");
-  useTrigger(wantsNew, () => setDraft(blank()));
+  useTrigger(wantsNew, () => {
+    // Prefill from the share sheet: /learning?new=1&title=…&url=…
+    const shared = params.get("url");
+    setDraft({ ...blank(), title: params.get("title") ?? "", resources: shared ? [{ url: shared }] : [] });
+  });
   useEffect(() => {
     if (wantsNew) router.replace("/learning");
   }, [wantsNew, router]);
-  const now = useNow(60_000);
 
   const goal = profile?.learning_goal_per_week ?? 5;
   const weekStart = startOfWeek(today, profile?.week_starts_on ?? 1);
@@ -188,19 +215,6 @@ export function LearningView() {
 
   const loggedToday = stats.counts.has(today);
   const daysLeft = 7 - diffDays(today, weekStart);
-
-  const revisit = useMemo(
-    () =>
-      entries
-        .filter((e) => {
-          const age = diffDays(today, e.entry_date);
-          const target = REVIEW_INTERVALS[Math.min(e.review_count, REVIEW_INTERVALS.length - 1)];
-          const since = e.last_reviewed_at ? (now - Date.parse(e.last_reviewed_at)) / 86_400_000 : age;
-          return age >= 1 && since >= target && e.review_count < REVIEW_INTERVALS.length;
-        })
-        .slice(0, 3),
-    [entries, today, now],
-  );
 
   const filtered = entries.filter(
     (e) => (!tag || e.tags.includes(tag)) && (!q || `${e.title} ${e.content} ${e.tags.join(" ")}`.toLowerCase().includes(q.toLowerCase())),
@@ -235,9 +249,6 @@ export function LearningView() {
     );
   };
 
-  const markReviewed = (e: LearningEntry) =>
-    save.mutate({ id: e.id, title: e.title, review_count: e.review_count + 1, last_reviewed_at: new Date().toISOString() });
-
   const runRecap = async () => {
     setRecapLoading(true);
     setRevealed(new Set());
@@ -259,7 +270,7 @@ export function LearningView() {
       <PageHeader
         title="Learning"
         icon={<GraduationCap className="h-5 w-5" />}
-        subtitle="A line a day compounds. Log what you learned, revisit it, and go deeper with AI."
+        subtitle="A line a day compounds. Log what you learned, lock it in with flashcards, and go deeper with AI."
         right={
           <Button variant="primary" onClick={() => setDraft(blank())}>
             <Plus className="h-4 w-4" /> Log learning
@@ -462,27 +473,9 @@ export function LearningView() {
             )}
           </Card>
 
-          {revisit.length ? (
-            <Card className="p-4">
-              <SectionTitle>Revisit (spaced repetition)</SectionTitle>
-              <ul className="space-y-2.5">
-                {revisit.map((e) => (
-                  <li key={e.id} className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] text-fg">{e.title}</div>
-                      <div className="text-[11.5px] text-faint">{dateLabel(e.entry_date, today)}</div>
-                    </div>
-                    <a href={chatgptUrl(PROMPTS[1].build(e))} target="_blank" rel="noreferrer" className="text-[12px] text-accent hover:underline">
-                      Quiz
-                    </a>
-                    <button onClick={() => markReviewed(e)} className="text-[12px] text-muted hover:text-fg">
-                      Done
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
+          <FlashcardsPanel onReview={() => setReviewing(true)} />
+
+          <LearningSuggestions />
 
           {stats.tags.length ? (
             <Card className="p-4">
@@ -500,6 +493,8 @@ export function LearningView() {
           ) : null}
         </aside>
       </div>
+
+      <ReviewDialog open={reviewing} onOpenChange={setReviewing} />
 
       <Dialog
         open={!!draft}

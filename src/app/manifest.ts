@@ -19,6 +19,12 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
+    // Android: Share → Productivize (job links go straight to the tracker)
+    share_target: {
+      action: "/share",
+      method: "get",
+      params: { title: "title", text: "text", url: "url" },
+    },
     shortcuts: [
       { name: "Today", url: "/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Log learning", short_name: "Learn", url: "/learning?new=1", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },

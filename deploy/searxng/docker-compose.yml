@@ -1,0 +1,28 @@
+# Self-hosted SearXNG behind Caddy (automatic HTTPS) — unlimited, free web search
+# for Productivize's hourly job search. See README.md in this folder.
+services:
+  searxng:
+    image: docker.io/searxng/searxng:2026.10.2-e652ca7d2
+    restart: unless-stopped
+    volumes:
+      - ./settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=https://${SEARXNG_DOMAIN}/${SEARXNG_PATH_SECRET}/
+    expose:
+      - "8080"
+
+  caddy:
+    image: docker.io/library/caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SEARXNG_DOMAIN=${SEARXNG_DOMAIN}
+      - SEARXNG_PATH_SECRET=${SEARXNG_PATH_SECRET}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

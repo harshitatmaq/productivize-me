@@ -1,4 +1,5 @@
 import { connection } from "next/server";
+import { embeddingProviders } from "@/lib/ai/embeddings";
 import { configuredProviderSummary } from "@/lib/ai/llm";
 import { handle, requireUser } from "@/lib/auth";
 import { env } from "@/lib/env";
@@ -32,6 +33,7 @@ export async function GET() {
       push: pushConfigured(),
       email: emailConfigured(),
       cron: !!env("CRON_SECRET"),
+      embeddings: embeddingProviders().map((p) => p.model),
       serviceKey: !!(env("SUPABASE_SECRET_KEY") ?? env("SUPABASE_SERVICE_ROLE_KEY")),
       usage,
     };

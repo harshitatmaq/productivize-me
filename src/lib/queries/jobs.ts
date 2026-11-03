@@ -39,9 +39,13 @@ export function useUpdateJob() {
       return { prev };
     },
     onError: (_e, _v, ctx) => ctx?.prev && qc.setQueryData(["jobs"], ctx.prev),
-    onSuccess: (job) => {
+    onSuccess: (job, vars) => {
       const prev = qc.getQueryData<Job[]>(["jobs"]);
       if (prev) qc.setQueryData(["jobs"], prev.map((j) => (j.id === job.id ? job : j)));
+      // Status / next-step changes create or close follow-up tasks in the database.
+      if ("status" in vars.patch || "next_step_date" in vars.patch || "next_step" in vars.patch) {
+        qc.invalidateQueries({ queryKey: ["tasks"] });
+      }
     },
   });
 }

@@ -9,6 +9,10 @@ export type QuickAddResult = {
   priority: 1 | 2 | 3 | 4;
   tags: string[];
   recurrence: TaskRecurrence | null;
+  /** "every 2 weeks" → 2 */
+  recurrence_interval: number;
+  /** Chosen weekdays for weekly repeats, 0 = Sunday … 6 = Saturday. */
+  recurrence_days: number[];
   estimate_minutes: number | null;
 };
 
@@ -23,7 +27,11 @@ const RECURRENCE_PATTERNS: [RegExp, TaskRecurrence][] = [
   [/\b(every\s*year|yearly|annually)\b/i, "yearly"],
 ];
 
-const WEEKLY_DAY = /\bevery\s+(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/i;
+const DAY_INDEX: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const INTERVAL = /\bevery\s+(other|\d{1,3})\s+(day|week|month|year)s?\b/i;
+const DAY_NAME = "(?:mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)";
+const WEEKDAY_LIST = new RegExp(`\\bevery\\s+(${DAY_NAME}\\b(?:\\s*(?:,|and|&|\\/)\\s*${DAY_NAME}\\b)*)`, "i");
+const WEEKLY_DAY_STRIP = (matched: string) => new RegExp(matched.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
 /**
  * Parses quick-add text such as
@@ -60,11 +68,28 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): QuickAddRe
     return " ";
   });
 
-  // "every monday" => weekly, starting next monday
-  const weekly = text.match(WEEKLY_DAY);
-  if (weekly) {
+  let interval = 1;
+  let days: number[] = [];
+  let dayStart: string | null = null;
+  const every = text.match(INTERVAL);
+  const dayList = text.match(WEEKDAY_LIST);
+  if (every) {
+    // "every 2 weeks", "every other day", "every 3 months"
+    interval = every[1].toLowerCase() === "other" ? 2 : Math.max(1, Number(every[1]));
+    const unit = every[2].toLowerCase();
+    recurrence = unit === "day" ? "daily" : unit === "week" ? "weekly" : unit === "month" ? "monthly" : "yearly";
+    text = text.replace(INTERVAL, " ");
+  } else if (dayList) {
+    // "every monday", "every mon, wed and fri" → weekly on those days, starting at the next one
+    days = [...new Set((dayList[1].toLowerCase().match(/mon|tue|wed|thu|fri|sat|sun/g) ?? []).map((d) => DAY_INDEX[d]))].sort();
     recurrence = "weekly";
-    text = text.replace(WEEKLY_DAY, ` ${weekly[1]} `);
+    text = text.replace(WEEKLY_DAY_STRIP(dayList[0]), " ");
+    const start = new Date(ref);
+    for (let i = 0; i < 7; i++) {
+      if (days.includes(start.getDay())) break;
+      start.setDate(start.getDate() + 1);
+    }
+    dayStart = toDateStr(start);
   } else {
     for (const [re, rule] of RECURRENCE_PATTERNS) {
       if (re.test(text)) {
@@ -89,6 +114,7 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): QuickAddRe
     text = text.slice(0, hit.index) + " " + text.slice(hit.index + hit.text.length);
   }
 
+  if (dayStart && !due_date) due_date = dayStart;
   if (recurrence && !due_date) due_date = toDateStr(ref);
 
   const title = text
@@ -103,6 +129,8 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): QuickAddRe
     priority,
     tags: Array.from(new Set(tags)),
     recurrence,
+    recurrence_interval: interval,
+    recurrence_days: days,
     estimate_minutes: estimate,
   };
 }

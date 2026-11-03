@@ -1,6 +1,7 @@
 "use client";
 
-import { AlarmClock, CalendarDays, CornerDownLeft, Flag, Hash, Plus, Repeat, Timer } from "lucide-react";
+import { AlarmClock, CalendarDays, CornerDownLeft, Flag, Hash, Mic, Plus, Repeat, Timer } from "lucide-react";
+import { useVoiceInput } from "@/lib/voice";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/misc";
@@ -8,7 +9,7 @@ import { useToday } from "@/lib/hooks";
 import { parseQuickAdd } from "@/lib/nlp";
 import { useCreateTask } from "@/lib/queries/tasks";
 import { cn } from "@/lib/utils";
-import { dateLabel, formatTime, localIso, PRIORITY_COLOR } from "./task-utils";
+import { dateLabel, describeRecurrence, formatTime, localIso, PRIORITY_COLOR } from "./task-utils";
 
 /**
  * Natural-language task input:
@@ -36,6 +37,10 @@ export function QuickAdd({
   const create = useCreateTask();
   const parsed = useMemo(() => (text.trim() ? parseQuickAdd(text) : null), [text]);
   const due = parsed?.due_date ?? defaultDate ?? null;
+  const voice = useVoiceInput((heard) => {
+    setText((t) => (t ? `${t} ${heard}` : heard));
+    ref.current?.focus();
+  });
 
   const submit = () => {
     if (!parsed?.title) return;
@@ -48,6 +53,8 @@ export function QuickAdd({
         priority: parsed.priority,
         tags: parsed.tags,
         recurrence: parsed.recurrence,
+        recurrence_interval: parsed.recurrence_interval,
+        recurrence_days: parsed.recurrence_days,
         estimate_minutes: parsed.estimate_minutes,
         reminder_at: due && due_time ? localIso(due, due_time) : null,
       },
@@ -88,6 +95,20 @@ export function QuickAdd({
           className="h-11 min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-faint"
           enterKeyHint="done"
         />
+        {voice.supported ? (
+          <button
+            type="button"
+            onClick={voice.listening ? voice.stop : voice.start}
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors",
+              voice.listening ? "animate-pulse bg-danger/15 text-danger" : "text-faint hover:bg-panel-hover hover:text-fg",
+            )}
+            aria-label={voice.listening ? "Stop listening" : "Add by voice"}
+            title={voice.listening ? "Listening… tap to stop" : "Add by voice"}
+          >
+            <Mic className="h-4 w-4" />
+          </button>
+        ) : null}
         {text ? (
           <button
             onClick={submit}
@@ -119,7 +140,7 @@ export function QuickAdd({
           {parsed.recurrence ? (
             <Badge>
               <Repeat className="h-3 w-3" />
-              {parsed.recurrence}
+              {describeRecurrence(parsed)}
             </Badge>
           ) : null}
           {parsed.estimate_minutes ? (

@@ -19,6 +19,11 @@ export type Task = {
   reminder_at: string | null;
   reminder_sent_at: string | null;
   recurrence: TaskRecurrence | null;
+  recurrence_interval: number;
+  recurrence_days: number[];
+  series_id: string | null;
+  actual_minutes: number;
+  job_id: string | null;
   carry_count: number;
   original_due_date: string | null;
   last_carried_at: string | null;
@@ -68,6 +73,8 @@ export type Profile = {
   email_alerts: boolean;
   job_search_enabled: boolean;
   job_alert_min_score: number;
+  calendar_token: string | null;
+  share_progress: boolean;
 };
 
 export type AppNotification = {
@@ -116,6 +123,7 @@ export type JobProfileRow = {
   watch_companies: WatchCompany[];
   disabled_sources: string[];
   last_search_at: string | null;
+  ats_discovery: Record<string, { at: string; found: WatchCompany | null }>;
 };
 
 export type Job = {
@@ -145,6 +153,11 @@ export type Job = {
   next_step_date: string | null;
   notes: string | null;
   analysis: JobAnalysis | null;
+  feedback: -1 | 1 | null;
+  feedback_reason: string | null;
+  feedback_at: string | null;
+  semantic_score: number | null;
+  follow_up_task_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -177,4 +190,43 @@ export type PortfolioRow = {
   data: PortfolioData;
   accent: string;
   updated_at: string;
+};
+
+export type Flashcard = {
+  id: string;
+  entry_id: string | null;
+  front: string;
+  back: string;
+  tags: string[];
+  card: import("@/lib/fsrs").StoredCard;
+  due: string;
+  reps: number;
+  lapses: number;
+  suspended: boolean;
+  last_reviewed_at: string | null;
+  created_at: string;
+};
+
+export type FocusSession = {
+  id: string;
+  task_id: string | null;
+  kind: "focus" | "pomodoro" | "stopwatch";
+  started_at: string;
+  ended_at: string;
+  minutes: number;
+};
+
+export type BuddyStats = {
+  user_id: string;
+  name: string;
+  is_me: boolean;
+  tasks_done_week: number;
+  tasks_done_today: number;
+  tasks_open_today: number;
+  learning_days_week: number;
+  learning_goal: number;
+  learning_streak: number;
+  applications_week: number;
+  focus_minutes_week: number;
+  last_active: string | null;
 };

@@ -6,6 +6,8 @@ import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FocusPill } from "@/components/focus/focus-pill";
+import { FocusProvider } from "@/components/focus/focus-store";
 import { CarryReview } from "@/components/tasks/carry-review";
 import { QuickAddDialog } from "@/components/tasks/quick-add-dialog";
 import { TaskEditor } from "@/components/tasks/task-editor";
@@ -327,6 +329,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!mounted) return <ShellSkeleton />;
   return (
     <UiProvider>
+      <FocusProvider>
       <div className="flex min-h-dvh">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -340,6 +343,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CarryReview />
       <TimezoneSync />
       <Hotkeys />
+      <FocusPill />
+      </FocusProvider>
     </UiProvider>
   );
 }

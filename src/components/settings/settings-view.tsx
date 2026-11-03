@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Briefcase, Download, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
+import { BellRing, Briefcase, CalendarDays, Download, HeartHandshake, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { useProfile, useUpdateProfile, useUser } from "@/lib/queries/profile";
 import { currentSubscription, disablePush, enablePush, pushSupport } from "@/lib/push-client";
 import type { Profile } from "@/lib/types";
 import { api, timeAgo } from "@/lib/utils";
+import { CalendarFeed } from "./calendar-feed";
 import { IntegrationStatus } from "./integration-status";
 
 function Section({ id, title, icon, children, description }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode; description?: string }) {
@@ -269,6 +270,21 @@ export function SettingsView() {
                 Send test email
               </Button>
             </div>
+          </Card>
+        </Section>
+
+        <Section id="calendar" title="Calendar feed" icon={<CalendarDays className="h-4 w-4" />}>
+          <CalendarFeed profile={profile} />
+        </Section>
+
+        <Section id="together" title="Together" icon={<HeartHandshake className="h-4 w-4" />}>
+          <Card className="px-4">
+            <Switch
+              label="Share my weekly progress with my buddy"
+              description="Totals only (tasks done, learning days, applications, focus time) — see the Together page."
+              checked={profile.share_progress}
+              onChange={(v) => set({ share_progress: v })}
+            />
           </Card>
         </Section>
 

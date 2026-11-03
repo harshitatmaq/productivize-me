@@ -69,3 +69,22 @@ export function localIso(date: string, time: string): string {
 export function isOverdue(t: Task, today: string) {
   return t.status === "todo" && !!t.due_date && t.due_date < today;
 }
+
+const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "daily", "every 2 weeks · Mon, Wed", "weekdays" … */
+export function describeRecurrence(t: Pick<Task, "recurrence" | "recurrence_interval" | "recurrence_days">): string {
+  if (!t.recurrence) return "";
+  const n = t.recurrence_interval ?? 1;
+  const unit = { daily: "day", weekly: "week", monthly: "month", yearly: "year", weekdays: "" }[t.recurrence];
+  const base = t.recurrence === "weekdays" ? "weekdays" : n > 1 ? `every ${n} ${unit}s` : t.recurrence;
+  const days = t.recurrence === "weekly" && t.recurrence_days?.length ? ` · ${[...t.recurrence_days].sort().map((d) => SHORT_DAYS[d]).join(", ")}` : "";
+  return base + days;
+}
+
+export function formatMinutes(m: number): string {
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h}h ${r}m` : `${h}h`;
+}

@@ -1,6 +1,7 @@
 "use client";
 
-import { AlarmClock, AlignLeft, CalendarArrowUp, Copy, MoreHorizontal, Redo2, Repeat, Trash2 } from "lucide-react";
+import { AlarmClock, AlignLeft, Briefcase, CalendarArrowUp, Copy, MoreHorizontal, Redo2, Repeat, Timer, Trash2 } from "lucide-react";
+import { useFocus } from "@/components/focus/focus-store";
 import { toast } from "sonner";
 import { useUi } from "@/components/shell/ui-store";
 import { Menu, MenuItem, MenuSeparator, Tip } from "@/components/ui/menu";
@@ -10,7 +11,7 @@ import type { Task } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { RescheduleMenu } from "./reschedule-menu";
 import { TaskCheckbox } from "./task-checkbox";
-import { dateLabel, formatTime, PRIORITY_COLOR } from "./task-utils";
+import { dateLabel, describeRecurrence, formatMinutes, formatTime, PRIORITY_COLOR } from "./task-utils";
 
 export function TaskItem({ task, showDate = true, compact = false }: { task: Task; showDate?: boolean; compact?: boolean }) {
   const today = useToday();
@@ -18,6 +19,8 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
   const update = useUpdateTask();
   const del = useDeleteTask();
   const create = useCreateTask();
+  const focus = useFocus();
+  const focusing = focus.run?.taskId === task.id;
   const done = task.status === "done";
   const overdue = !done && !!task.due_date && task.due_date < today;
 
@@ -65,15 +68,25 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
           {task.recurrence ? (
             <span className="inline-flex items-center gap-1">
               <Repeat className="h-3 w-3" />
-              {task.recurrence}
+              {describeRecurrence(task)}
             </span>
           ) : null}
+          {focusing ? (
+            <span className="inline-flex items-center gap-1 text-accent">
+              <Timer className="h-3 w-3" /> focusing
+            </span>
+          ) : null}
+          {task.job_id ? <Briefcase className="h-3 w-3" /> : null}
           {task.reminder_at && !done ? (
             <Tip content={`Reminder ${new Date(task.reminder_at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`}>
               <AlarmClock className="h-3 w-3" />
             </Tip>
           ) : null}
-          {task.estimate_minutes ? <span>{task.estimate_minutes >= 60 ? `${Math.round(task.estimate_minutes / 6) / 10}h` : `${task.estimate_minutes}m`}</span> : null}
+          {task.estimate_minutes || task.actual_minutes ? (
+            <span className={cn(task.estimate_minutes && task.actual_minutes > task.estimate_minutes * 1.25 && "text-warning")}>
+              {task.actual_minutes ? `${formatMinutes(task.actual_minutes)}${task.estimate_minutes ? ` / ${formatMinutes(task.estimate_minutes)}` : " spent"}` : formatMinutes(task.estimate_minutes!)}
+            </span>
+          ) : null}
           {task.carry_count > 0 && !done ? (
             <Tip content={`Carried forward ${task.carry_count}× · originally ${task.original_due_date ?? "?"}`}>
               <span className="inline-flex items-center gap-1 text-warning">
@@ -122,6 +135,20 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
             </MenuItem>
           ))}
           <MenuSeparator />
+          {!done ? (
+            <>
+              <MenuItem icon={<Timer className="h-3.5 w-3.5" />} onSelect={() => focus.start({ taskId: task.id, title: task.title, minutes: 25 })}>
+                Focus 25 min
+              </MenuItem>
+              <MenuItem icon={<Timer className="h-3.5 w-3.5" />} onSelect={() => focus.start({ taskId: task.id, title: task.title, minutes: 50 })}>
+                Focus 50 min
+              </MenuItem>
+              <MenuItem icon={<Timer className="h-3.5 w-3.5" />} onSelect={() => focus.start({ taskId: task.id, title: task.title, minutes: null })}>
+                Stopwatch
+              </MenuItem>
+              <MenuSeparator />
+            </>
+          ) : null}
           <MenuItem
             icon={<Copy className="h-3.5 w-3.5" />}
             onSelect={() =>
@@ -133,6 +160,9 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
                 priority: task.priority,
                 tags: task.tags,
                 estimate_minutes: task.estimate_minutes,
+                recurrence: task.recurrence,
+                recurrence_interval: task.recurrence_interval,
+                recurrence_days: task.recurrence_days,
               })
             }
           >

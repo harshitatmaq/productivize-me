@@ -9,6 +9,12 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 - **Learning**: a daily learning log with a 5-days-a-week goal, streaks, a heatmap, spaced-repetition revisits, an AI weekly recap with a quiz, and one-click **Continue in ChatGPT / Claude** with your notes pre-filled. You get a nudge on days you haven't logged.
 - **Portfolio**: your professional home page with a live preview. It can be drafted from your job profile and published at `/p/<your-name>`.
 - **Mobile**: an installable PWA with push notifications on Android, iPhone (iOS 16.4+, after "Add to Home Screen") and desktop. Daily and weekly email digests are included too.
+- **Habits**: every repeating task ("every 2 weeks", "every mon, wed and fri") is a habit with a streak, a 4-week grid and a completion rate.
+- **Focus timer & Plan my day**: Pomodoro or stopwatch per task (estimate vs. actual time), and an AI plan that orders the rest of your day into time blocks.
+- **Voice quick-add, calendar feed, share-to-app**: speak a task; subscribe to your tasks and reminders in Google/Apple Calendar; on Android, share a job from LinkedIn/Naukri straight into the tracker.
+- **Smarter job search**: semantic matching (free embeddings), 👍/👎 that teach Scout your taste, full descriptions read before scoring, Hacker News "Who is hiring?", Workday career sites, auto-discovered boards for your dream companies, follow-up tasks a week after you apply, and a tailored one-click resume PDF.
+- **Flashcards**: turn learning entries into FSRS spaced-repetition cards; job-search gaps become learning suggestions.
+- **Together**: opt-in weekly numbers for the two of you, with cheer and nudge buttons.
 
 ## Stack
 
@@ -37,7 +43,7 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 ### 1. Supabase (free)
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql). It's safe to re-run.
+2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql). Both are safe to re-run.
 3. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off "Allow new users to sign up"**. Only accounts you create can log in.
 4. Create the two accounts, either in **Authentication → Users → Add user** (tick "Auto confirm") or from the command line after step 3 below:
    ```bash
@@ -62,6 +68,8 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 | SerpApi | [serpapi.com](https://serpapi.com) | Optional; Google Jobs |
 | Adzuna / Jooble | [developer.adzuna.com](https://developer.adzuna.com), [jooble.org/api](https://jooble.org/api/about) | Optional; India, US, UK and more |
 | Gmail SMTP | Google Account → Security → App passwords | For email digests |
+| Jina | [jina.ai](https://jina.ai) | Optional; better page reading + embeddings |
+| SearXNG | self-hosted, see [deploy/searxng](deploy/searxng/README.md) | Optional; unlimited web search on a free Oracle VM |
 
 Free-tier limits change; check each provider's pricing page. You only need **one** LLM key and **one** search key to start. Remotive, Remote OK, Himalayas, Jobicy, Arbeitnow and company career pages need no key at all.
 
@@ -97,10 +105,23 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/cro
 
 The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alternative, and [cron-job.org](https://cron-job.org) works as well.
 
-### 6. Phones
+### 6. Optional extras
+
+- **Semantic matching** works automatically once `GEMINI_API_KEY` or `JINA_API_KEY` is set. Prefer no third-party embeddings? Deploy the included Supabase Edge Function:
+  ```bash
+  supabase functions deploy embed --no-verify-jwt
+  supabase secrets set EMBED_SECRET=<same value as CRON_SECRET>
+  ```
+  Then set `EMBED_FUNCTION_ENABLED=true` and `EMBEDDINGS_PROVIDER_ORDER=supabase`.
+- **Unlimited web search:** [deploy/searxng](deploy/searxng/README.md) (Oracle Cloud Always Free + Caddy).
+- **Calendar:** Settings → Calendar feed → *Add to Google Calendar* / *Open in Apple Calendar*.
+- **Together:** each of you turns on *Share my weekly progress* (Settings or the Together page).
+
+### 7. Phones
 
 - **Android (Chrome):** open the site → ⋮ → **Install app** → open it → **Settings → Enable notifications**.
 - **iPhone (Safari, iOS 16.4+):** Share → **Add to Home Screen** → open it from the Home Screen → **Settings → Enable notifications**. iOS only allows web push for installed apps.
+- **Share to the app (Android):** after installing, LinkedIn/Naukri/Chrome's Share menu lists *Productivize*. Shared job links land in the tracker, already scored. (iOS doesn't support share targets for web apps; paste the link into Jobs → Tracker → Add application instead.)
 - Use the same login on your laptop and phone. Every device you enable receives notifications, and Settings lists them.
 
 ## How the pieces work
@@ -112,7 +133,7 @@ The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alter
 2. Each day the profile becomes a *search plan*: titles, synonyms, keywords, locations and web queries.
 3. Every hour, each source that's due is queried. Free APIs are rate-limited politely, and paid-tier-with-free-quota APIs are **paced** so a monthly quota lasts the whole month.
 4. Results are normalized and de-duplicated (by URL and by company + title) against everything you've already seen.
-5. A cheap keyword pre-filter picks the most promising ~30. The LLM chain then scores each one 0–100 with reasons and concerns, and cleans up messy search results.
+5. A keyword pre-filter keeps ~120 candidates. Embeddings re-rank them by meaning and towards jobs like the ones you 👍 (and away from 👎). The top ~8 get their full description fetched, then the LLM chain scores the best ~30 from 0–100, with your feedback in the prompt.
 6. Matches at or above your alert score (default 75) trigger a push notification.
 
 **LLM fallback.** Every provider speaks the OpenAI `/chat/completions` format. On a rate limit (429), outage, timeout or invalid JSON, the chain moves to the provider's next model, then the next provider. Rate-limited models cool down so later calls skip them. To change the order, set `LLM_PROVIDER_ORDER`.
@@ -129,7 +150,7 @@ The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alter
 ## Development
 
 ```bash
-npm test          # unit tests (time zones, recurrence, quick-add parsing, dedupe, LLM fallback, budgets)
+npm test          # unit + database tests (migrations on in-process Postgres, recurrence, FSRS, ICS, parsing, LLM fallback…)
 npm run typecheck
 npm run lint
 npm run build

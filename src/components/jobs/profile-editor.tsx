@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, RefreshCw, Save, Trash2 } from "lucide-react";
+import { Building2, Radar, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useResettableState } from "@/lib/hooks";
 import { toast } from "sonner";
@@ -17,6 +17,8 @@ import { api } from "@/lib/utils";
 /** Mirrors parseWatchCompany() on the server (kept client-side to avoid importing node crypto). */
 function parseCompany(input: string): WatchCompany | null {
   const s = input.trim();
+  const wd = s.match(/([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i);
+  if (wd) return { ats: "workday", slug: `${wd[1].toLowerCase()}/${wd[2]}`, name: wd[1].split(".")[0] };
   const patterns: [RegExp, WatchCompany["ats"]][] = [
     [/(?:job-)?boards(?:-api)?\.greenhouse\.io\/(?:v1\/boards\/)?([a-z0-9_-]+)/i, "greenhouse"],
     [/jobs\.lever\.co\/([a-z0-9_-]+)/i, "lever"],
@@ -42,6 +44,24 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
   const [saving, setSaving] = useState(false);
   const [replanning, setReplanning] = useState(false);
   const [companyInput, setCompanyInput] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+
+  const discover = async () => {
+    setDiscovering(true);
+    try {
+      const r = await api<{ found: WatchCompany[]; missing?: string[]; checked: number; message?: string }>("/api/jobs/discover", { method: "POST" });
+      qc.invalidateQueries({ queryKey: ["job-profile"] });
+      if (r.message) toast(r.message);
+      else
+        toast.success(r.found.length ? `Found ${r.found.length} career board${r.found.length === 1 ? "" : "s"}: ${r.found.map((f) => f.name).join(", ")}` : "No public boards found for those names", {
+          description: r.missing?.length ? `Not found: ${r.missing.slice(0, 6).join(", ")} — paste their careers URL instead.` : undefined,
+        });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDiscovering(false);
+    }
+  };
 
   const set = <K extends keyof JobProfile>(k: K, v: JobProfile[K]) => {
     setP((x) => ({ ...x, [k]: v }));
@@ -77,7 +97,7 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
 
   const addCompany = () => {
     const c = parseCompany(companyInput);
-    if (!c) return toast.error("Paste a Greenhouse, Lever, Ashby, Workable or SmartRecruiters careers URL (or e.g. greenhouse:stripe)");
+    if (!c) return toast.error("Paste a Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Workday careers URL (or e.g. greenhouse:stripe)");
     const list = row.watch_companies ?? [];
     if (list.some((x) => x.ats === c.ats && x.slug === c.slug)) return toast("Already watching");
     updateRow.mutate({ watch_companies: [...list, c] });
@@ -169,15 +189,22 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
       </Card>
 
       <Card className="p-4">
-        <SectionTitle>
-          <span className="inline-flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5" /> Watch company career pages
-          </span>
-        </SectionTitle>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <SectionTitle className="mb-0">
+            <span className="inline-flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Watch company career pages
+            </span>
+          </SectionTitle>
+          <Button size="sm" variant="ghost" onClick={discover} loading={discovering} disabled={!(p.target_companies ?? []).length} title="Looks up Greenhouse, Lever and Ashby boards for your dream companies">
+            <Radar className="h-3.5 w-3.5" /> Find boards for dream companies
+          </Button>
+        </div>
         <p className="mb-3 text-[12.5px] text-muted">
-          Checked every 2 hours straight from their applicant-tracking system — no API key needed. Paste a careers URL like{" "}
+          Checked every 2 hours straight from their applicant-tracking system — no API key needed. Dream companies are looked up
+          automatically; for others paste a careers URL like{" "}
           <code className="text-fg-2">boards.greenhouse.io/stripe</code>, <code className="text-fg-2">jobs.lever.co/netflix</code> or{" "}
-          <code className="text-fg-2">jobs.ashbyhq.com/openai</code>.
+          <code className="text-fg-2">jobs.ashbyhq.com/openai</code> or a Workday site like{" "}
+          <code className="text-fg-2">nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite</code>.
         </p>
         <div className="flex gap-2">
           <Input value={companyInput} onChange={(e) => setCompanyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCompany()} placeholder="Careers page URL" />
@@ -188,7 +215,7 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
             {row.watch_companies.map((c) => (
               <span key={`${c.ats}:${c.slug}`} className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-panel-2 pl-2 pr-1 text-[12.5px] text-fg-2">
                 {c.name ?? c.slug}
-                <span className="text-[11px] text-faint">{c.ats}</span>
+                <span className="text-[11px] text-faint">{c.ats}{c.auto ? " · auto" : ""}</span>
                 <button
                   className="rounded p-0.5 text-faint hover:text-danger"
                   onClick={() => updateRow.mutate({ watch_companies: row.watch_companies.filter((x) => !(x.ats === c.ats && x.slug === c.slug)) })}

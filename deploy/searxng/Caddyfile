@@ -1,0 +1,7 @@
+# Only requests under the secret path reach SearXNG, so strangers can't use your instance.
+{$SEARXNG_DOMAIN} {
+	handle_path /{$SEARXNG_PATH_SECRET}/* {
+		reverse_proxy searxng:8080
+	}
+	respond 404
+}

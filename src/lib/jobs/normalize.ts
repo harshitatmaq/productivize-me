@@ -159,6 +159,8 @@ export function relevance(job: RawJob, plan: SearchPlan, profile: JobProfile): n
 
 export function parseWatchCompany(input: string): WatchCompany | null {
   const s = input.trim();
+  const wd = s.match(/([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i);
+  if (wd) return { ats: "workday", slug: `${wd[1].toLowerCase()}/${wd[2]}`, name: wd[1].split(".")[0] };
   const patterns: [RegExp, WatchCompany["ats"]][] = [
     [/(?:job-)?boards(?:-api)?\.greenhouse\.io\/(?:v1\/boards\/)?([a-z0-9_-]+)/i, "greenhouse"],
     [/jobs\.lever\.co\/([a-z0-9_-]+)/i, "lever"],

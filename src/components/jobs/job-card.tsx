@@ -1,16 +1,13 @@
 "use client";
 
-import { Bookmark, BookmarkCheck, Check, EyeOff, ExternalLink, MapPin, Wallet, Clock, Wifi } from "lucide-react";
+import { Check, ExternalLink, MapPin, Wallet, Clock, Wifi } from "lucide-react";
+import { JobFeedback } from "./job-feedback";
 import { Tip } from "@/components/ui/menu";
-import { useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { CompanyLogo, ScoreBadge, sourceLabel } from "./job-bits";
 
 export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
-  const update = useUpdateJob();
-  const set = (patch: Partial<Job>) => update.mutate({ id: job.id, patch });
-  const saved = job.status === "saved";
   const fresh = !job.seen_at && job.status === "new";
 
   return (
@@ -75,20 +72,7 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
           <div className="mt-3 flex items-center justify-between gap-2">
             <span className="truncate text-[11px] text-faint">{sourceLabel(job.source)}</span>
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-              <Tip content={saved ? "Saved" : "Save"}>
-                <button
-                  onClick={() => set({ status: saved ? "new" : "saved" })}
-                  className={cn("rounded-md p-1.5 hover:bg-panel-hover", saved ? "text-accent" : "text-faint hover:text-fg")}
-                  aria-label="Save"
-                >
-                  {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-                </button>
-              </Tip>
-              <Tip content="Not interested">
-                <button onClick={() => set({ status: "archived" })} className="rounded-md p-1.5 text-faint hover:bg-panel-hover hover:text-fg" aria-label="Hide">
-                  <EyeOff className="h-4 w-4" />
-                </button>
-              </Tip>
+              <JobFeedback job={job} />
               <a
                 href={job.url}
                 target="_blank"

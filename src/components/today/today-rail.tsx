@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, BellRing, Briefcase, Flame, GraduationCap } from "lucide-react";
+import { ArrowUpRight, BellRing, Briefcase, Flame, GraduationCap, Timer } from "lucide-react";
+import { useFocusSessions } from "@/lib/queries/focus";
+import { useFlashcards } from "@/lib/queries/flashcards";
+import { formatMinutes } from "@/components/tasks/task-utils";
 import Link from "next/link";
 import { useMemo } from "react";
 import { ProgressRing } from "@/components/ui/misc";
@@ -40,6 +43,11 @@ export function TodayRail() {
   const { data: profile } = useProfile();
   const { data: reminders = [] } = useReminders();
   const weekStart = startOfWeek(today, profile?.week_starts_on ?? 1);
+  const { data: sessions = [] } = useFocusSessions(new Date(`${weekStart}T00:00:00`).toISOString());
+  const focusToday = sessions.filter((s) => todayStr(new Date(s.started_at)) === today).reduce((n, s) => n + s.minutes, 0);
+  const focusWeek = sessions.reduce((n, s) => n + s.minutes, 0);
+  const { data: cards = [] } = useFlashcards();
+  const dueCards = cards.filter((c) => Date.parse(c.due) <= now).length;
 
   const { week, streak } = useMemo(() => {
     const byDay = new Map<string, number>();
@@ -117,6 +125,14 @@ export function TodayRail() {
             {streak}-day streak
           </span>
         </div>
+        {focusWeek ? (
+          <div className="mt-2 flex items-center justify-between border-t border-line pt-2 text-[12px] text-muted">
+            <span className="inline-flex items-center gap-1">
+              <Timer className="h-3 w-3 text-warning" /> Focus today {formatMinutes(focusToday)}
+            </span>
+            <span>{formatMinutes(focusWeek)} this week</span>
+          </div>
+        ) : null}
       </Widget>
 
       <Widget title="Learning" icon={<GraduationCap className="h-3.5 w-3.5 text-accent" />} href="/learning">
@@ -131,6 +147,12 @@ export function TodayRail() {
             <div className="text-[12px] text-muted">{learnDays >= goal ? "Weekly goal reached" : `${goal - learnDays} more this week`}</div>
           </div>
         </div>
+        {dueCards ? (
+          <Link href="/learning?review=1" className="mt-3 flex items-center justify-between rounded-lg border border-accent/25 bg-accent-soft px-3 py-2 text-[12.5px] text-fg-2 hover:text-fg">
+            <span>{dueCards} flashcard{dueCards === 1 ? "" : "s"} due</span>
+            <span className="text-accent">Review →</span>
+          </Link>
+        ) : null}
         {!learnedToday ? (
           <Link href="/learning?new=1" className="mt-3 block rounded-lg border border-line bg-panel-2 px-3 py-2 text-center text-[12.5px] text-fg-2 hover:border-line-strong hover:text-fg">
             What did you learn today?

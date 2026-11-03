@@ -84,9 +84,12 @@ export type ScoredJob = RawJob & {
 };
 
 export type WatchCompany = {
-  ats: "greenhouse" | "lever" | "ashby" | "workable" | "smartrecruiters";
+  ats: "greenhouse" | "lever" | "ashby" | "workable" | "smartrecruiters" | "workday";
+  /** For Workday: "<host>/<site>", e.g. "nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite". */
   slug: string;
   name?: string;
+  /** Found automatically from the "dream companies" list. */
+  auto?: boolean;
 };
 
 export type JobStatus = "new" | "saved" | "applied" | "interviewing" | "offer" | "rejected" | "archived";
@@ -103,4 +106,18 @@ export type JobAnalysis = {
   questions_to_ask: string[];
   generated_at: string;
   provider?: string;
+};
+
+/** Structured resume used for the tailored PDF. */
+export type ResumeData = {
+  name: string;
+  headline?: string;
+  contact: { email?: string; phone?: string; location?: string; links: string[] };
+  summary?: string;
+  skills: { group: string; items: string[] }[];
+  experience: { role: string; company: string; location?: string; start?: string; end?: string; bullets: string[] }[];
+  projects: { name: string; description: string; tech: string[]; link?: string }[];
+  education: { degree: string; school: string; year?: string }[];
+  certifications: string[];
+  tailoredFor?: { title: string; company?: string | null };
 };

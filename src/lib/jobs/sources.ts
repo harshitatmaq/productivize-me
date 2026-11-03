@@ -411,6 +411,8 @@ const serpapi: JobSource = {
 /** "3 days ago" -> ISO date. */
 export function parseRelative(s: string | undefined): string | null {
   if (!s) return null;
+  if (/today|just now/i.test(s)) return new Date().toISOString();
+  if (/yesterday/i.test(s)) return new Date(Date.now() - 86_400_000).toISOString();
   const m = s.match(/(\d+)\s*(minute|hour|day|week|month)/i);
   if (!m) return null;
   const n = Number(m[1]);
@@ -473,7 +475,7 @@ const web: JobSource = {
     const queries = plan.web_queries.length
       ? plan.web_queries
       : plan.titles.slice(0, 3).map((t) => ({ q: `${t} job ${plan.locations[0] ?? ""}`.trim(), domains: "ats" as const }));
-    const perRun = manual ? 3 : envInt("WEB_QUERIES_PER_RUN", 2);
+    const perRun = manual ? 3 : envInt("WEB_QUERIES_PER_RUN", env("SEARXNG_URL") ? 6 : 2);
     const out: RawJob[] = [];
     for (const wq of pick(queries, cursor, perRun)) {
       const domains = wq.domains ? DOMAIN_GROUPS[wq.domains] : [];
@@ -499,6 +501,62 @@ const web: JobSource = {
           needs_extraction: true,
         });
       }
+    }
+    return out;
+  },
+};
+
+// ----------------------------------------------------------------------------
+// Hacker News "Ask HN: Who is hiring?" (monthly thread, free Algolia API)
+// ----------------------------------------------------------------------------
+
+const ROLE_WORDS = /\b(engineer|developer|scientist|manager|designer|analyst|architect|sre|devops|lead|intern|researcher|programmer|consultant|specialist|head of|director|founding)\b/i;
+
+/** "Acme | Senior Backend Engineer | Remote (US) | $150k" → structured fields. */
+export function parseHnPosting(firstLine: string): { company: string; title: string; location: string | null; remote: boolean } | null {
+  const parts = firstLine.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const company = parts[0].replace(/\(.*?\)/g, "").trim();
+  const title = parts.slice(1).find((p) => ROLE_WORDS.test(p)) ?? parts[1];
+  const location = parts.slice(1).find((p) => p !== title && /remote|onsite|on-site|hybrid|,|\b[A-Z]{2}\b|india|bangalore|bengaluru|london|berlin|york|francisco|europe|usa|us\b/i.test(p)) ?? null;
+  return { company, title: title.slice(0, 200), location, remote: /remote/i.test(firstLine) };
+}
+
+const hn: JobSource = {
+  id: "hn",
+  label: "Hacker News — Who is hiring?",
+  kind: "free",
+  minIntervalMin: 720,
+  configured: () => true,
+  async fetch({ plan }) {
+    const stories = await getJson<{ hits?: { objectID: string; title: string }[] }>(
+      "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10",
+    );
+    const story = (stories.hits ?? []).find((h) => /who is hiring/i.test(h.title));
+    if (!story) return [];
+    const comments = await getJson<{ hits?: { objectID: string; comment_text?: string; parent_id?: number; created_at?: string }[] }>(
+      `https://hn.algolia.com/api/v1/search?tags=comment,story_${story.objectID}&hitsPerPage=1000`,
+    );
+    const words = [...plan.titles, ...plan.keywords].flatMap((t) => t.toLowerCase().split(/\s+/)).filter((w) => w.length > 2);
+    const out: RawJob[] = [];
+    for (const c of comments.hits ?? []) {
+      if (String(c.parent_id) !== story.objectID || !c.comment_text) continue;
+      const text = stripHtml(c.comment_text, 4000);
+      const lower = text.toLowerCase();
+      if (!words.some((w) => lower.includes(w))) continue;
+      const parsed = parseHnPosting(text.split("\n")[0]);
+      if (!parsed) continue;
+      out.push({
+        source: "hn",
+        external_id: c.objectID,
+        url: `https://news.ycombinator.com/item?id=${c.objectID}`,
+        title: parsed.title,
+        company: parsed.company,
+        location: parsed.location,
+        remote: parsed.remote,
+        description: text,
+        posted_at: c.created_at ?? null,
+      });
     }
     return out;
   },
@@ -582,6 +640,33 @@ async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
         posted_at: toIso(j.published_on as string),
       }));
     }
+    case "workday": {
+      const [host, site] = c.slug.split("/");
+      const tenant = host.split(".")[0];
+      const out: RawJob[] = [];
+      const queries = [...new Set((c as WatchCompany & { queries?: string[] }).queries ?? [""])].slice(0, 2);
+      for (const searchText of queries) {
+        const d = await getJson<{ jobPostings?: Record<string, unknown>[] }>(`https://${host}/wday/cxs/${tenant}/${site}/jobs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText }),
+        });
+        for (const j of d.jobPostings ?? []) {
+          if (!j.externalPath) continue;
+          out.push({
+            source: "workday",
+            external_id: String(j.externalPath),
+            url: `https://${host}/${site}${j.externalPath}`,
+            title: String(j.title),
+            company: name,
+            location: (j.locationsText as string) ?? null,
+            remote: /remote/i.test(String(j.locationsText ?? "")),
+            posted_at: parseRelative(j.postedOn as string),
+          });
+        }
+      }
+      return out;
+    }
     case "smartrecruiters": {
       const d = await getJson<{ content?: Record<string, unknown>[] }>(
         `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(c.slug)}/postings?limit=100`,
@@ -605,12 +690,14 @@ async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
 
 const ats: JobSource = {
   id: "ats",
-  label: "Watched companies (Greenhouse, Lever, Ashby, Workable, SmartRecruiters)",
+  label: "Watched companies (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Workday)",
   kind: "ats",
   minIntervalMin: 120,
   configured: () => true,
-  async fetch({ watch, log }) {
-    const results = await Promise.allSettled(watch.slice(0, 25).map(fetchAts));
+  async fetch({ watch, log, plan }) {
+    // Workday boards are searched by title instead of listing everything.
+    const withQueries = watch.slice(0, 30).map((c) => (c.ats === "workday" ? { ...c, queries: plan.titles.slice(0, 2) } : c));
+    const results = await Promise.allSettled(withQueries.map(fetchAts));
     const out: RawJob[] = [];
     results.forEach((r, i) => {
       if (r.status === "fulfilled") out.push(...r.value);
@@ -620,7 +707,7 @@ const ats: JobSource = {
   },
 };
 
-export const JOB_SOURCES: JobSource[] = [web, jsearch, serpapi, adzuna, jooble, ats, remotive, himalayas, remoteok, jobicy, arbeitnow];
+export const JOB_SOURCES: JobSource[] = [web, jsearch, serpapi, adzuna, jooble, ats, hn, remotive, himalayas, remoteok, jobicy, arbeitnow];
 
 export function jobSourceSummary() {
   return JOB_SOURCES.map((s) => ({

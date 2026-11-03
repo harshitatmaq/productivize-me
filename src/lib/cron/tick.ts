@@ -181,7 +181,7 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
   const { data: existing } = await admin.from("notifications").select("id").eq("user_id", p.id).eq("dedupe_key", key).maybeSingle();
   if (existing) return;
 
-  const [{ data: today }, { count: overdue }, { data: jobs }, { data: learning }] = await Promise.all([
+  const [{ data: today }, { count: overdue }, { data: jobs }, { data: learning }, { count: cardsDue }] = await Promise.all([
     admin
       .from("tasks")
       .select("title, due_time, priority")
@@ -206,6 +206,12 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
       .select("entry_date")
       .eq("user_id", p.id)
       .gte("entry_date", startOfWeek(date, p.week_starts_on)),
+    admin
+      .from("flashcards")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", p.id)
+      .eq("suspended", false)
+      .lte("due", new Date().toISOString()),
   ]);
 
   const tasks = today ?? [];
@@ -215,6 +221,7 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
     overdue ? `${overdue} overdue` : null,
     jobs?.length ? `${plural(jobs.length, "new job match")}` : null,
     `Learning ${learnDays}/${p.learning_goal_per_week} this week`,
+    cardsDue ? `${plural(cardsDue, "flashcard")} due` : null,
   ].filter(Boolean);
 
   const email =
@@ -236,7 +243,10 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
               ...(jobs?.length
                 ? [{ heading: "New job matches", items: jobs.map((j) => ({ text: `${j.title}${j.company ? ` · ${j.company}` : ""}`, meta: `${j.score}% match`, href: "/jobs" })) }]
                 : []),
-              { heading: "Learning", paragraph: `${learnDays}/${p.learning_goal_per_week} days logged this week.` },
+              {
+                heading: "Learning",
+                paragraph: `${learnDays}/${p.learning_goal_per_week} days logged this week.${cardsDue ? ` ${plural(cardsDue, "flashcard")} waiting for review.` : ""}`,
+              },
             ],
             cta: { label: "Open today", href: "/" },
           }),

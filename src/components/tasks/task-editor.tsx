@@ -1,6 +1,8 @@
 "use client";
 
-import { AlarmClock, Trash2 } from "lucide-react";
+import { AlarmClock, Timer, Trash2 } from "lucide-react";
+import { useFocus } from "@/components/focus/focus-store";
+import { cn } from "@/lib/utils";
 import { useResettableState } from "@/lib/hooks";
 import { toast } from "sonner";
 import { useUi } from "@/components/shell/ui-store";
@@ -11,7 +13,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/misc";
 import { useDeleteTask, useUpdateTask } from "@/lib/queries/tasks";
 import type { Task } from "@/lib/types";
-import { localIso, PRIORITY_COLOR, PRIORITY_LABEL } from "./task-utils";
+import { formatMinutes, localIso, PRIORITY_COLOR, PRIORITY_LABEL } from "./task-utils";
 
 type ReminderMode = "none" | "at" | "10" | "30" | "60" | "custom";
 
@@ -34,6 +36,7 @@ export function TaskEditor() {
   const { editing, editTask } = useUi();
   const update = useUpdateTask();
   const del = useDeleteTask();
+  const focus = useFocus();
   const [draft, setDraft] = useResettableState<Task | null, Task | null>(editing, (t) => t);
   const [mode, setMode] = useResettableState<ReminderMode, Task | null>(editing, (t) => (t ? reminderMode(t) : "none"));
   const [custom, setCustom] = useResettableState(editing, (t) => toLocalInput(t?.reminder_at ?? null));
@@ -62,6 +65,8 @@ export function TaskEditor() {
           tags: draft.tags,
           estimate_minutes: draft.estimate_minutes || null,
           recurrence: draft.recurrence || null,
+          recurrence_interval: draft.recurrence ? Math.max(1, draft.recurrence_interval || 1) : 1,
+          recurrence_days: draft.recurrence === "weekly" ? draft.recurrence_days : [],
           reminder_at,
           ...(changedReminder ? { reminder_sent_at: null } : {}),
         },
@@ -92,6 +97,17 @@ export function TaskEditor() {
           >
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
+          {draft.status === "todo" ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                focus.start({ taskId: draft.id, title: draft.title, minutes: 25 });
+                editTask(null);
+              }}
+            >
+              <Timer className="h-3.5 w-3.5" /> Focus
+            </Button>
+          ) : null}
           <Button variant="ghost" onClick={() => editTask(null)}>
             Cancel
           </Button>
@@ -147,7 +163,7 @@ export function TaskEditor() {
               <option value="yearly">Every year</option>
             </Select>
           </Field>
-          <Field label="Estimate (minutes)">
+          <Field label="Estimate (minutes)" hint={draft.actual_minutes ? `${formatMinutes(draft.actual_minutes)} tracked with focus` : undefined}>
             <Input
               type="number"
               min={0}
@@ -158,6 +174,50 @@ export function TaskEditor() {
             />
           </Field>
         </div>
+
+        {draft.recurrence && draft.recurrence !== "weekdays" ? (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel-2/50 p-3">
+            <span className="text-[12.5px] text-muted">Every</span>
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              className="w-16"
+              value={draft.recurrence_interval ?? 1}
+              onChange={(e) => set("recurrence_interval", Math.max(1, Number(e.target.value) || 1))}
+            />
+            <span className="text-[12.5px] text-muted">
+              {{ daily: "day(s)", weekly: "week(s)", monthly: "month(s)", yearly: "year(s)" }[draft.recurrence as "daily"]}
+            </span>
+            {draft.recurrence === "weekly" ? (
+              <div className="flex w-full flex-wrap gap-1.5">
+                {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => {
+                  const on = (draft.recurrence_days ?? []).includes(i);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() =>
+                        set(
+                          "recurrence_days",
+                          on ? draft.recurrence_days.filter((x) => x !== i) : [...(draft.recurrence_days ?? []), i].sort(),
+                        )
+                      }
+                      className={cn(
+                        "h-8 w-8 rounded-full border text-[12px] font-medium transition-colors",
+                        on ? "border-accent bg-accent text-white" : "border-line text-muted hover:text-fg",
+                      )}
+                      aria-pressed={on}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+                <span className="self-center text-[11.5px] text-faint">{(draft.recurrence_days ?? []).length ? "" : "same weekday as the due date"}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <Field label={<span className="inline-flex items-center gap-1.5"><AlarmClock className="h-3.5 w-3.5" /> Reminder (push + in-app)</span>}>
           <Select value={mode} onChange={(e) => setMode(e.target.value as ReminderMode)}>

@@ -13,6 +13,8 @@ import type { Job } from "@/lib/types";
 import { api, timeAgo } from "@/lib/utils";
 import type { JobAnalysis } from "@/lib/jobs/types";
 import { CompanyLogo, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
+import { JobFeedback } from "./job-feedback";
+import { ResumeButton } from "./resume-pdf";
 
 function CopyButton({ text }: { text: string }) {
   return (
@@ -101,9 +103,13 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
       }
       footer={
         <>
-          <Button variant="ghost" className="mr-auto text-danger hover:text-danger" onClick={() => { del.mutate(job.id); onClose(); }}>
+          <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => { del.mutate(job.id); onClose(); }} aria-label="Delete job">
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
+          <div className="mr-auto flex items-center">
+            <JobFeedback job={job} />
+          </div>
+          <ResumeButton jobId={job.id} label="Resume" variant="secondary" />
           <Select value={job.status} onChange={(e) => setStatus(e.target.value as Job["status"])} className="h-8 w-auto py-1">
             {Object.entries(STATUS_META).map(([k, v]) => (
               <option key={k} value={k}>
@@ -230,7 +236,8 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
                 <List items={analysis.questions_to_ask} />
               </section>
             </div>
-            <div className="flex items-center justify-between text-[11.5px] text-faint">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px] text-faint">
+              <ResumeButton jobId={job.id} label="Download tailored resume PDF" variant="primary" size="sm" />
               <span>
                 Generated {timeAgo(analysis.generated_at)}
                 {analysis.provider ? ` · ${analysis.provider}` : ""}
