@@ -12,6 +12,7 @@ export function QuickAddDialog() {
     <Dialog open={!!quickAdd} onOpenChange={(o) => !o && closeQuickAdd()} title="New task" size="md">
       <QuickAdd
         autoFocus
+        initialText={quickAdd?.text}
         defaultDate={quickAdd?.due_date === undefined ? today : quickAdd.due_date}
         onDone={closeQuickAdd}
       />

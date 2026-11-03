@@ -20,14 +20,16 @@ export function QuickAdd({
   autoFocus,
   onDone,
   className,
+  initialText,
 }: {
+  initialText?: string;
   defaultDate?: string | null;
   placeholder?: string;
   autoFocus?: boolean;
   onDone?: () => void;
   className?: string;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [focused, setFocused] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const today = useToday();
