@@ -65,9 +65,16 @@ export function sourceLabel(source: string) {
     ashby: "Ashby",
     workable: "Workable",
     smartrecruiters: "SmartRecruiters",
+    workday: "Workday",
+    hn: "Hacker News",
+    jobspy: "",
+    email: "Email alert",
     manual: "Added by you",
   };
+  const sites: Record<string, string> = { linkedin: "LinkedIn", naukri: "Naukri", indeed: "Indeed", glassdoor: "Glassdoor", wellfound: "Wellfound", instahyre: "Instahyre", foundit: "Foundit" };
   if (base === "web") return "Web search";
+  if (base === "jobspy") return sites[sub] ?? sub;
+  if (base === "email") return `${sites[sub] ?? sub ?? "Job"} alert email`;
   return sub ? `${names[base] ?? base} · ${sub}` : (names[base] ?? base);
 }
 

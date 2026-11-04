@@ -50,7 +50,7 @@ export function runJobspy(req: JobspyRequest, timeoutMs = 150_000): Promise<Jobs
   const python = process.env.JOBSPY_PYTHON || (process.platform === "win32" ? "py" : "python3");
   const script = path.join(process.cwd(), "worker", "jobspy_fetch.py");
   return new Promise((resolve, reject) => {
-    const child = spawn(python, ["-I", script], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    const child = spawn(/* turbopackIgnore: true */ python, ["-I", script], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     let out = "";
     let err = "";
     const timer = setTimeout(() => {

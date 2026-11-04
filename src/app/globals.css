@@ -294,6 +294,19 @@
   }
 }
 
+/* A job that just streamed in over Realtime: one soft accent pulse. */
+@keyframes arrival {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.live-arrival {
+  animation: arrival 1.6s ease-out 2;
+}
+
 .animate-fade-in {
   animation: fade-in 0.22s ease-out both;
 }

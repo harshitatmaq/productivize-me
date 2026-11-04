@@ -1,24 +1,27 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Briefcase, Compass, Radar, Search, Sparkles, Wifi } from "lucide-react";
+import { Briefcase, Compass, MessageSquareText, Radar, Search, Sparkles, Wifi } from "lucide-react";
+import { AnimatePresence } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useNow } from "@/lib/hooks";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageHeader, Segmented, Skeleton } from "@/components/ui/misc";
-import { useJobProfile, useJobRuns, useJobs } from "@/lib/queries/jobs";
+import { isRunLive, useJobProfile, useJobRuns, useJobs, useJobsRealtime } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { api, cn, plural, timeAgo } from "@/lib/utils";
 import { Activity } from "./activity";
-import { JobCard } from "./job-card";
 import { JobDrawer } from "./job-drawer";
+import { JobGrid } from "./job-grid";
+import { LiveRun } from "./live-run";
 import { ProfileEditor } from "./profile-editor";
 import { ScoutChat } from "./scout-chat";
+import { SearchPanel } from "./search-panel";
 import { TrackerBoard } from "./tracker-board";
 
-type Tab = "matches" | "tracker" | "profile" | "activity";
+type Tab = "matches" | "search" | "tracker" | "profile" | "activity";
 
 export function JobsView() {
   const params = useSearchParams();
@@ -27,6 +30,7 @@ export function JobsView() {
   const { data: jobs = [], isLoading } = useJobs();
   const { data: row, isLoading: profileLoading } = useJobProfile();
   const { data: runs = [] } = useJobRuns();
+  useJobsRealtime();
   const ready = row?.status === "ready";
   const [tabChoice, setTab] = useState<Tab | null>((params.get("tab") as Tab) || null);
   // Until the user picks a tab, land on matches when Scout is set up, otherwise on the interview.
@@ -74,15 +78,19 @@ export function JobsView() {
     saved: jobs.filter((j) => j.status === "saved").length,
     applied: jobs.filter((j) => ["applied", "interviewing", "offer"].includes(j.status)).length,
   };
-  const lastRun = runs[0];
-  const running = lastRun?.status === "running" && now - Date.parse(lastRun.started_at) < 6 * 60_000;
+  const lastRun = runs.find((r) => !r.search_id);
+  // The hourly / "Search now" run in progress (live searches show on the Search tab).
+  const liveRun = runs.find((r) => !r.search_id && isRunLive(r, now));
+  const running = !!liveRun;
+  const liveFound = liveRun ? jobs.filter((j) => j.created_at >= liveRun.started_at && !j.search_id).length : 0;
 
   const searchNow = async () => {
     setSearching(true);
     const t = toast.loading("Searching job boards, career pages and the web… (up to a few minutes)");
     try {
-      const r = await api<{ stats: { inserted: number; strong: number; fetched: number; log: string[] } }>("/api/jobs/search", { method: "POST" });
-      toast.success(`${plural(r.stats.inserted, "new job")} · ${r.stats.strong} strong matches (scanned ${r.stats.fetched})`, { id: t });
+      const r = await api<{ queued: boolean; worker?: string; stats?: { inserted: number; strong: number; fetched: number } }>("/api/jobs/search", { method: "POST" });
+      if (r.queued || !r.stats) toast.success("Scout's worker picked this up — new matches stream in as they're found.", { id: t });
+      else toast.success(`${plural(r.stats.inserted, "new job")} · ${r.stats.strong} strong matches (scanned ${r.stats.fetched})`, { id: t });
       qc.invalidateQueries({ queryKey: ["jobs"] });
       qc.invalidateQueries({ queryKey: ["job-runs"] });
     } catch (e) {
@@ -125,6 +133,7 @@ export function JobsView() {
           onChange={changeTab}
           options={[
             { value: "matches", label: "Matches", count: counts.new || undefined },
+            { value: "search", label: <span className="inline-flex items-center gap-1.5"><MessageSquareText className="h-3.5 w-3.5" /> Search &amp; ask</span> },
             { value: "tracker", label: "Tracker", count: tracked.length || undefined },
             { value: "profile", label: ready ? "Profile & Scout" : "Set up Scout" },
             { value: "activity", label: "Activity" },
@@ -193,6 +202,7 @@ export function JobsView() {
                 ]}
               />
             </div>
+            <AnimatePresence>{liveRun ? <LiveRun run={liveRun} found={liveFound} className="mb-4" /> : null}</AnimatePresence>
             {isLoading ? (
               <div className="grid gap-3 md:grid-cols-2">
                 {[0, 1, 2, 3].map((i) => (
@@ -206,15 +216,13 @@ export function JobsView() {
                   : "The first search is running or scheduled. Hit “Search now” to run one immediately."}
               </EmptyState>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {filtered.map((j) => (
-                  <JobCard key={j.id} job={j} onOpen={() => setOpen(j)} />
-                ))}
-              </div>
+              <JobGrid key={`${view}-${minScore}-${sort}-${remoteOnly}`} jobs={filtered} onOpen={setOpen} />
             )}
           </>
         )
       ) : null}
+
+      {tab === "search" ? <SearchPanel jobs={jobs} onOpen={setOpen} /> : null}
 
       {tab === "tracker" ? <TrackerBoard jobs={tracked} onOpen={setOpen} /> : null}
 

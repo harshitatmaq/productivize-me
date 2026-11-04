@@ -8,7 +8,10 @@ import { api, cn } from "@/lib/utils";
 export type ServerStatus = {
   ai: { id: string; label: string; configured: boolean; models: string[]; signupUrl: string }[];
   search: { id: string; label: string; configured: boolean; monthlyLimit: number; signupUrl: string }[];
-  sources: { id: string; label: string; kind: string; configured: boolean; minIntervalMin: number; signupUrl?: string }[];
+  sources: { id: string; label: string; kind: string; configured: boolean; minIntervalMin: number; signupUrl?: string; workerOnly: boolean }[];
+  embeddings?: string[];
+  workers?: { name: string; online: boolean; last_seen: string; capabilities: string[]; jobspy_sites: string[]; gmail_for_me: boolean }[];
+  gmail?: { last_run_at: string | null; lastSyncAt?: string; lastUid?: number; last_count?: number; last_error?: string | null } | null;
   push: boolean;
   email: boolean;
   cron: boolean;
@@ -67,9 +70,13 @@ export function IntegrationStatus({ only }: { only?: ("ai" | "search" | "sources
       {show("sources") ? (
         <Card className="p-4">
           <SectionTitle>Job sources</SectionTitle>
-          {data.sources.map((s) => (
-            <Row key={s.id} ok={s.configured} label={s.label} meta={s.configured ? `every ${s.minIntervalMin >= 60 ? `${s.minIntervalMin / 60}h` : `${s.minIntervalMin}m`}` : undefined} href={s.signupUrl} />
-          ))}
+          {data.sources.map((s) => {
+            // Worker-only sources are configured on the worker (its own .env), not here.
+            const viaWorker = s.workerOnly && !s.configured;
+            const ok = viaWorker ? (data.workers ?? []).some((w) => w.online) : s.configured;
+            const every = `every ${s.minIntervalMin >= 60 ? `${s.minIntervalMin / 60}h` : `${s.minIntervalMin}m`}`;
+            return <Row key={s.id} ok={ok} label={s.label} meta={viaWorker ? "Scout worker" : ok ? every : undefined} href={viaWorker ? undefined : s.signupUrl} />;
+          })}
         </Card>
       ) : null}
       {show("system") ? (

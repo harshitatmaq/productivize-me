@@ -74,7 +74,7 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
               <JobFeedback job={job} />
               <a
-                href={job.url}
+                href={job.apply_url ?? job.url}
                 target="_blank"
                 rel="noreferrer"
                 className="ml-1 inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[12px] text-fg-2 hover:border-line-strong hover:text-fg"

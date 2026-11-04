@@ -158,6 +158,11 @@ export type Job = {
   feedback_at: string | null;
   semantic_score: number | null;
   follow_up_task_id: string | null;
+  /** Direct application link (company ATS) when it differs from the listing. */
+  apply_url: string | null;
+  ats: string | null;
+  /** Set when the job was found by a "Search & ask Scout" query. */
+  search_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -174,13 +179,28 @@ export type JobRun = {
     inserted?: number;
     strong?: number;
     providers?: string[];
-    sources?: Record<string, { fetched: number; error?: string; skipped?: string }>;
+    sources?: Record<string, { fetched: number; error?: string; skipped?: string; running?: boolean }>;
     log?: string[];
     ms?: number;
+    /** What the run is doing right now (cleared when it finishes). */
+    stage?: string;
   };
   error: string | null;
+  worker: string | null;
+  search_id: string | null;
   started_at: string;
   finished_at: string | null;
+};
+
+export type SavedSearch = {
+  id: string;
+  query: string;
+  plan: Partial<SearchPlan> & { companies?: string[]; posted_within_days?: number | null; summary?: string };
+  saved: boolean;
+  alerts: boolean;
+  result_count: number;
+  last_run_at: string | null;
+  created_at: string;
 };
 
 export type PortfolioRow = {

@@ -43,7 +43,7 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 ### 1. Supabase (free)
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql). Both are safe to re-run.
+2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql). All are safe to re-run.
 3. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off "Allow new users to sign up"**. Only accounts you create can log in.
 4. Create the two accounts, either in **Authentication → Users → Add user** (tick "Auto confirm") or from the command line after step 3 below:
    ```bash
@@ -117,7 +117,18 @@ The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alter
 - **Calendar:** Settings → Calendar feed → *Add to Google Calendar* / *Open in Apple Calendar*.
 - **Together:** each of you turns on *Share my weekly progress* (Settings or the Together page).
 
-### 7. Phones
+### 7. Scout worker (recommended for job search)
+
+The app searches the web and job boards every hour on its own. Run the **Scout worker** on your Windows PC and/or a free Oracle VM to add LinkedIn, Naukri, Indeed and Glassdoor listings (public, never logged in), 100+ curated company career sites, your Gmail job-alert label, and live results for *Jobs → Search & ask*:
+
+```bash
+npm run worker:once   # one pass to test
+npm run worker        # keep running
+```
+
+Setup for Windows, Oracle (Docker) and the Gmail label: [worker/README.md](worker/README.md). Its status shows in **Jobs → Activity**.
+
+### 8. Phones
 
 - **Android (Chrome):** open the site → ⋮ → **Install app** → open it → **Settings → Enable notifications**.
 - **iPhone (Safari, iOS 16.4+):** Share → **Add to Home Screen** → open it from the Home Screen → **Settings → Enable notifications**. iOS only allows web push for installed apps.

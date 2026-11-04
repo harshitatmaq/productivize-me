@@ -1,6 +1,6 @@
 # Productivize — Roadmap: Scout v2 (job search, applications, career memory)
 
-Status: **agreed design, not built yet.** Each phase starts only after a go-ahead.
+Status: **Phase 1 built** (worker + queue, JobSpy / curated career sites / Gmail label sources, live-streaming feed, Search & ask Scout). Phases 2–6 start after a go-ahead.
 Platforms: **Android + Windows first** (iPhone pieces that already exist stay as they are).
 
 ---
@@ -201,7 +201,7 @@ All background AI work goes through **one Supabase queue** (`agent_jobs`): type,
 
 ## 10. Phases
 
-1. **Worker + queue + sources**: JobSpy, career sites, Gmail label; live-streaming feed; Search & ask Scout page.
+1. ✅ **Worker + queue + sources**: JobSpy, career sites, Gmail label; live-streaming feed; Search & ask Scout page.
 2. **Career memory**: facts, check-in questions, "What Scout knows" page; feeds into search plans.
 3. **Applications**: answer bank, save → prepare, Apply sheet, full applied-jobs record, email status updates.
 4. **Stretch prompts** + paste-back resume versions.

@@ -15,6 +15,7 @@ import { currentSubscription, disablePush, enablePush, pushSupport } from "@/lib
 import type { Profile } from "@/lib/types";
 import { api, timeAgo } from "@/lib/utils";
 import { CalendarFeed } from "./calendar-feed";
+import { GmailCard } from "./gmail-card";
 import { IntegrationStatus } from "./integration-status";
 
 function Section({ id, title, icon, children, description }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode; description?: string }) {
@@ -307,6 +308,9 @@ export function SettingsView() {
               />
             </div>
           </Card>
+          <div className="mt-3">
+            <GmailCard />
+          </div>
         </Section>
 
         <Section id="integrations" title="Integrations" icon={<Plug className="h-4 w-4" />} description="API keys live in the server environment (never in the browser). Anything unticked is skipped automatically.">
