@@ -3,6 +3,7 @@ import { assertCron, handle } from "@/lib/auth";
 import { runJobSearch } from "@/lib/jobs/pipeline";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { Profile } from "@/lib/cron/tick";
+import { workerOnline } from "@/lib/worker";
 
 export const maxDuration = 300;
 
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
   await connection();
   return handle(async () => {
     assertCron(request);
+    // The Scout worker runs searches itself (every few minutes, sources claimed per interval).
+    // Vercel only steps in when no worker has checked in recently.
+    if ((await workerOnline()) && new URL(request.url).searchParams.get("force") !== "1") {
+      return { ok: true, delegated: "worker" };
+    }
     if (new URL(request.url).searchParams.get("wait") === "1") {
       return { ok: true, results: await runAll() };
     }

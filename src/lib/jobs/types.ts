@@ -71,6 +71,8 @@ export type RawJob = {
   description?: string | null;
   posted_at?: string | null;
   tags?: string[];
+  /** Direct application link when it differs from the listing URL. */
+  apply_url?: string | null;
   /** Search hits whose title/company need cleaning up by the LLM. */
   needs_extraction?: boolean;
 };

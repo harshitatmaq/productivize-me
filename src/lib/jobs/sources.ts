@@ -3,7 +3,11 @@ import "server-only";
 import { env, envInt } from "@/lib/env";
 import { webSearch } from "@/lib/search/web";
 import { paceAllows, recordCall } from "@/lib/usage";
-import { domainOf, formatSalary, looksLikeListingPage, stripHtml } from "./normalize";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { CAREER_OPS_BOARDS } from "./company-seed";
+import { gmailAccounts, readGmailLabel } from "./gmail";
+import { countryForIndeed, jobspySites, mapJobspyRecord, runJobspy } from "./jobspy";
+import { domainOf, formatSalary, looksLikeListingPage, stripHtml, titleScore } from "./normalize";
 import type { RawJob, SearchPlan, WatchCompany, WebQuery } from "./types";
 
 export type SourceContext = {
@@ -14,14 +18,23 @@ export type SourceContext = {
   /** Rotating cursor (persisted per user+source) so each run tries different queries. */
   cursor: number;
   log: (msg: string) => void;
+  userId: string;
+  userEmail: string | null;
+  /** When this source last ran for this user (null = first run). */
+  lastRunAt: number | null;
+  /** Source-specific state persisted between runs (e.g. Gmail's last UID). */
+  state: Record<string, unknown>;
+  saveState: (patch: Record<string, unknown>) => void;
 };
 
 export type JobSource = {
   id: string;
   label: string;
-  kind: "free" | "key" | "search" | "ats";
+  kind: "free" | "key" | "search" | "ats" | "scrape" | "email";
   /** Minimum minutes between runs per user (be polite to free APIs). */
   minIntervalMin: number;
+  /** Needs the Scout worker (Python, IMAP or long runs) — skipped on Vercel. */
+  workerOnly?: boolean;
   configured: () => boolean;
   signupUrl?: string;
   fetch: (ctx: SourceContext) => Promise<RawJob[]>;
@@ -566,12 +579,24 @@ const hn: JobSource = {
 // Company career pages on public ATS APIs (no key)
 // ----------------------------------------------------------------------------
 
-async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
+// Boards are shared by both users and re-used for ~50 minutes within a worker process.
+const boardCache = new Map<string, { at: number; jobs: RawJob[] }>();
+
+export async function fetchAtsCached(c: WatchCompany, opts: { light?: boolean } = {}): Promise<RawJob[]> {
+  const key = `${c.ats}:${c.slug.toLowerCase()}:${opts.light ? "l" : "f"}`;
+  const hit = boardCache.get(key);
+  if (hit && Date.now() - hit.at < 50 * 60_000) return hit.jobs;
+  const jobs = await fetchAts(c, opts);
+  boardCache.set(key, { at: Date.now(), jobs });
+  return jobs;
+}
+
+async function fetchAts(c: WatchCompany, opts: { light?: boolean } = {}): Promise<RawJob[]> {
   const name = c.name ?? c.slug;
   switch (c.ats) {
     case "greenhouse": {
       const d = await getJson<{ jobs?: Record<string, unknown>[] }>(
-        `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(c.slug)}/jobs?content=true`,
+        `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(c.slug)}/jobs${opts.light ? "" : "?content=true"}`,
       );
       return (d.jobs ?? []).map((j) => ({
         source: "greenhouse",
@@ -697,7 +722,7 @@ const ats: JobSource = {
   async fetch({ watch, log, plan }) {
     // Workday boards are searched by title instead of listing everything.
     const withQueries = watch.slice(0, 30).map((c) => (c.ats === "workday" ? { ...c, queries: plan.titles.slice(0, 2) } : c));
-    const results = await Promise.allSettled(withQueries.map(fetchAts));
+    const results = await Promise.allSettled(withQueries.map((c) => fetchAtsCached(c)));
     const out: RawJob[] = [];
     results.forEach((r, i) => {
       if (r.status === "fulfilled") out.push(...r.value);
@@ -707,10 +732,167 @@ const ats: JobSource = {
   },
 };
 
-export const JOB_SOURCES: JobSource[] = [web, jsearch, serpapi, adzuna, jooble, ats, hn, remotive, himalayas, remoteok, jobicy, arbeitnow];
+// ----------------------------------------------------------------------------
+// Curated companies: career-ops' MIT company list + India-focused companies
+// whose public boards the worker discovers daily (see company-seed.ts).
+// ----------------------------------------------------------------------------
+
+async function seedBoards(): Promise<WatchCompany[]> {
+  const { data } = await supabaseAdmin().from("source_state").select("data").eq("key", "global:seed-boards").maybeSingle();
+  const discovered = ((data?.data as { boards?: WatchCompany[] })?.boards ?? []).filter(Boolean);
+  const seen = new Set<string>();
+  return [...discovered, ...CAREER_OPS_BOARDS].filter((b) => {
+    const k = `${b.ats}:${b.slug.toLowerCase()}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+const seed: JobSource = {
+  id: "seed",
+  label: "Curated companies (career-ops list + India product companies)",
+  kind: "ats",
+  minIntervalMin: 120,
+  workerOnly: true,
+  configured: () => true,
+  async fetch({ plan, log }) {
+    const boards = await seedBoards();
+    const out: RawJob[] = [];
+    let failed = 0;
+    for (let i = 0; i < boards.length; i += 12) {
+      const results = await Promise.allSettled(boards.slice(i, i + 12).map((b) => fetchAtsCached(b, { light: true })));
+      for (const r of results) {
+        if (r.status === "rejected") {
+          failed++;
+          continue;
+        }
+        // Boards list every role; keep only titles that match this person's search plan.
+        for (const j of r.value) if (titleScore(j.title, plan.titles) >= 0.6) out.push(j);
+      }
+    }
+    if (failed) log(`seed: ${failed}/${boards.length} boards unavailable`);
+    return out.slice(0, 400);
+  },
+};
+
+// ----------------------------------------------------------------------------
+// JobSpy (LinkedIn, Indeed, Glassdoor, Naukri) — public listings, no login.
+// Which sites a worker scrapes is set by JOBSPY_SITES on that worker.
+// ----------------------------------------------------------------------------
+
+const JOBSPY_LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", glassdoor: "Glassdoor", naukri: "Naukri" };
+
+function jobspySource(site: "linkedin" | "indeed" | "glassdoor" | "naukri"): JobSource {
+  return {
+    id: `jobspy_${site}`,
+    label: `${JOBSPY_LABELS[site]} via JobSpy (public listings, no login)`,
+    kind: "scrape",
+    minIntervalMin: site === "glassdoor" ? 120 : 55,
+    workerOnly: true,
+    configured: () => jobspySites().includes(site),
+    async fetch({ plan, cursor, manual, lastRunAt }) {
+      const india = plan.countries.includes("in") || plan.countries.length === 0;
+      const location =
+        plan.remote === "remote"
+          ? india
+            ? "India"
+            : ""
+          : (plan.locations.find((l) => !/remote/i.test(l)) ?? (india ? "India" : ""));
+      // Only ask for what's new since the last run (+1h overlap); first run looks back 3 days.
+      const hours = lastRunAt ? Math.min(72, Math.max(2, Math.ceil((Date.now() - lastRunAt) / 3_600_000) + 1)) : 72;
+      const out: RawJob[] = [];
+      // Sequential and small: gentle on LinkedIn's rate limits.
+      for (const title of pick(plan.titles, cursor, manual ? 3 : 2)) {
+        const records = await runJobspy({
+          site,
+          search_term: title,
+          location,
+          is_remote: plan.remote === "remote",
+          results_wanted: site === "linkedin" ? 20 : 30,
+          hours_old: hours,
+          country_indeed: countryForIndeed(plan.countries[0]),
+        });
+        for (const r of records) {
+          const job = mapJobspyRecord(r, site);
+          if (job) out.push(job);
+        }
+      }
+      return out;
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Gmail "Productivize" label: job-alert emails from LinkedIn, Naukri, Indeed…
+// ----------------------------------------------------------------------------
+
+const gmail: JobSource = {
+  id: "gmail",
+  label: "Gmail job alerts (Productivize label)",
+  kind: "email",
+  minIntervalMin: 30,
+  workerOnly: true,
+  configured: () => gmailAccounts().size > 0,
+  async fetch({ userId, userEmail, state, saveState, log }) {
+    const pass = userEmail ? gmailAccounts().get(userEmail.toLowerCase()) : undefined;
+    if (!pass) {
+      log("gmail: no app password for this user on the worker (GMAIL_ACCOUNTS)");
+      return [];
+    }
+    const batch = await readGmailLabel(userEmail!, pass, {
+      lastUid: Number(state.lastUid ?? 0) || undefined,
+      uidValidity: (state.uidValidity as string) ?? undefined,
+    });
+    saveState({ lastUid: batch.lastUid, uidValidity: batch.uidValidity, lastSyncAt: new Date().toISOString(), lastEmails: batch.emails.length });
+    if (batch.emails.length) {
+      await supabaseAdmin()
+        .from("email_ingest")
+        .upsert(
+          batch.emails.map((e) => ({
+            user_id: userId,
+            message_id: e.messageId,
+            kind: e.kind,
+            sender: e.from,
+            subject: e.subject,
+            received_at: e.date,
+            parsed: { jobs: e.jobs },
+          })),
+          { onConflict: "user_id,message_id", ignoreDuplicates: true },
+        );
+      log(`gmail: ${batch.emails.length} new emails, ${batch.jobs.length} job links`);
+    }
+    return batch.jobs;
+  },
+};
+
+export const JOB_SOURCES: JobSource[] = [
+  web,
+  gmail,
+  jobspySource("linkedin"),
+  jobspySource("naukri"),
+  jobspySource("indeed"),
+  jobspySource("glassdoor"),
+  seed,
+  jsearch,
+  serpapi,
+  adzuna,
+  jooble,
+  ats,
+  hn,
+  remotive,
+  himalayas,
+  remoteok,
+  jobicy,
+  arbeitnow,
+];
+
+/** Sources suitable for a one-off live search (fast, query-driven). */
+export const LIVE_SOURCE_IDS = ["web", "jobspy_linkedin", "jobspy_naukri", "jobspy_indeed", "seed", "jsearch", "serpapi", "adzuna", "jooble", "remotive", "himalayas"];
 
 export function jobSourceSummary() {
   return JOB_SOURCES.map((s) => ({
+    workerOnly: !!s.workerOnly,
     id: s.id,
     label: s.label,
     kind: s.kind,

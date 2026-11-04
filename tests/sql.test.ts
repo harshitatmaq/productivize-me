@@ -19,7 +19,12 @@ beforeAll(async () => {
     create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}');
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   `);
-  for (const f of ["0001_init.sql", "0002_more_features.sql"]) {
+  try {
+    await db.exec("create publication supabase_realtime");
+  } catch {
+    // publications unsupported here — the migration skips that block
+  }
+  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql"]) {
     const sql = readFileSync(`supabase/migrations/${f}`, "utf8");
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -114,5 +119,46 @@ describe("embeddings column", () => {
     await db.exec(`insert into public.jobs (title, url, url_hash, dedupe_key, embedding) values ('ML', 'u', 'h', 'd', '${v}')`);
     const r = await one<{ n: number }>(`select extensions.vector_dims(embedding) as n from public.jobs where title = 'ML'`);
     expect(r.n).toBe(384);
+  });
+});
+
+describe("scout worker plumbing", () => {
+  it("claims a periodic source only once per interval", async () => {
+    const claim = async (key: string, min: number) =>
+      (await one<{ ok: boolean }>(`select public.claim_source('${key}', ${min}) as ok`)).ok;
+    expect(await claim("u:jobspy_linkedin", 60)).toBe(true);
+    expect(await claim("u:jobspy_linkedin", 60)).toBe(false);
+    await db.exec(`update public.source_state set last_run_at = now() - interval '61 minutes' where key = 'u:jobspy_linkedin'`);
+    expect(await claim("u:jobspy_linkedin", 60)).toBe(true);
+  });
+
+  it("hands each queued job to exactly one worker", async () => {
+    await db.exec(`insert into public.agent_jobs (user_id, type, priority) values ('${u1}', 'live_search', 1), ('${u1}', 'job_search', 5)`);
+    const a = await db.query<{ type: string; status: string; attempts: number }>(`select type, status, attempts from public.claim_agent_job('vm', array['live_search','job_search'])`);
+    const b = await db.query<{ type: string }>(`select type from public.claim_agent_job('pc', array['live_search','job_search'])`);
+    const c = await db.query(`select * from public.claim_agent_job('pc', array['live_search','job_search'])`);
+    expect(a.rows[0]).toMatchObject({ type: "live_search", status: "running", attempts: 1 });
+    expect(b.rows[0].type).toBe("job_search");
+    expect(c.rows).toHaveLength(0);
+    // a crashed worker's job becomes claimable again after 20 minutes
+    await db.exec(`update public.agent_jobs set locked_at = now() - interval '25 minutes' where type = 'live_search'`);
+    const d = await db.query<{ type: string; locked_by: string }>(`select type, locked_by from public.claim_agent_job('pc', array['live_search'])`);
+    expect(d.rows[0]).toMatchObject({ type: "live_search", locked_by: "pc" });
+  });
+
+  it("ranks stored jobs by meaning for the signed-in user only", async () => {
+    await asUser(u1);
+    const vec = (hot: number) => `[${Array.from({ length: 384 }, (_, i) => (i === hot ? 1 : 0)).join(",")}]`;
+    await db.exec(`insert into public.jobs (title, url, url_hash, dedupe_key, embedding, embedding_model) values
+      ('Data Engineer', 'a', 'ha', 'da', '${vec(0)}', 'm'),
+      ('Chef', 'b', 'hb', 'db', '${vec(5)}', 'm'),
+      ('Other model', 'c', 'hc', 'dc', '${vec(0)}', 'other')`);
+    const r = await db.query<{ title: string; similarity: number }>(
+      `select j.title, m.similarity from public.match_jobs('${vec(0)}', 'm', 10) m join public.jobs j on j.id = m.id`,
+    );
+    expect(r.rows.map((x) => x.title)).toEqual(["Data Engineer", "Chef"]);
+    expect(r.rows[0].similarity).toBeCloseTo(1);
+    await asUser(u2);
+    expect((await db.query(`select * from public.match_jobs('${vec(0)}', 'm', 10)`)).rows).toHaveLength(0);
   });
 });
