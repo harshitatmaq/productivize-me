@@ -1,26 +1,330 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   Design tokens — Linear-inspired: near-black canvas, hairline borders,
+   indigo accent, quiet typography. Light theme mirrors every token.
+   --------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #fbfbfc;
+  --bg-elev: #f4f5f7;
+  --panel: #ffffff;
+  --panel-2: #f6f7f9;
+  --panel-hover: #eff0f3;
+  --line: rgba(15, 18, 30, 0.08);
+  --line-strong: rgba(15, 18, 30, 0.14);
+  --fg: #16171a;
+  --fg-2: #3a3d44;
+  --muted: #696d75;
+  --faint: #9a9da5;
+  --accent: #5e6ad2;
+  --accent-hover: #4f5bc4;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(94, 106, 210, 0.1);
+  --accent-ring: rgba(94, 106, 210, 0.35);
+  --p1: #e5484d;
+  --p2: #f08c3a;
+  --p3: #5e6ad2;
+  --success: #2f9e6e;
+  --warning: #c98a0b;
+  --danger: #e5484d;
+  --shadow: 0 1px 2px rgba(16, 18, 27, 0.06), 0 8px 24px rgba(16, 18, 27, 0.06);
+  --shadow-pop: 0 2px 6px rgba(16, 18, 27, 0.08), 0 20px 48px rgba(16, 18, 27, 0.14);
+  --glow: radial-gradient(60% 50% at 50% 0%, rgba(94, 106, 210, 0.1), transparent 70%);
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #08090a;
+  --bg-elev: #0d0e10;
+  --panel: #121315;
+  --panel-2: #17181b;
+  --panel-hover: #1c1d21;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --fg: #f7f8f8;
+  --fg-2: #c9cbd0;
+  --muted: #8a8f98;
+  --faint: #5c6068;
+  --accent: #6e79e0;
+  --accent-hover: #828cf0;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(110, 121, 224, 0.14);
+  --accent-ring: rgba(110, 121, 224, 0.45);
+  --p1: #f2555a;
+  --p2: #f5a05a;
+  --p3: #7c86ea;
+  --success: #4cc38a;
+  --warning: #f2c94c;
+  --danger: #f2555a;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px rgba(0, 0, 0, 0.6);
+  --glow: radial-gradient(60% 50% at 50% 0%, rgba(110, 121, 224, 0.16), transparent 70%);
+  color-scheme: dark;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-elev: var(--bg-elev);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-panel-hover: var(--panel-hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-p1: var(--p1);
+  --color-p2: var(--p2);
+  --color-p3: var(--p3);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --shadow-card: var(--shadow);
+  --shadow-pop: var(--shadow-pop);
+  --radius-xl: 14px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  * {
+    border-color: var(--line);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-ring);
+    outline-offset: 1px;
+    border-radius: 6px;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator,
+  .dark input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+  /* Thin, quiet scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  .hairline {
+    border-color: var(--line);
+  }
+  .field {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13.5px;
+    color: var(--fg);
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .field::placeholder {
+    color: var(--faint);
+  }
+  .field:hover {
+    border-color: var(--line-strong);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+    background: var(--panel);
+  }
+  .label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 5px;
+    border: 1px solid var(--line-strong);
+    color: var(--muted);
+    background: var(--panel-2);
+  }
+  .glow-top {
+    background-image: var(--glow);
+  }
+  .prose-lite p {
+    margin: 0 0 0.6em;
+  }
+  .prose-lite ul {
+    list-style: disc;
+    padding-left: 1.2em;
+    margin: 0 0 0.6em;
+  }
+  .prose-lite ol {
+    list-style: decimal;
+    padding-left: 1.2em;
+    margin: 0 0 0.6em;
+  }
+  .prose-lite strong {
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .prose-lite code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+  .prose-lite a {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
+
+@utility safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+@utility safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes check-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* A job that just streamed in over Realtime: one soft accent pulse. */
+@keyframes arrival {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.live-arrival {
+  animation: arrival 1.6s ease-out 2;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.22s ease-out both;
+}
+.animate-check {
+  animation: check-pop 0.28s ease-out;
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--panel-hover) 37%, var(--panel-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

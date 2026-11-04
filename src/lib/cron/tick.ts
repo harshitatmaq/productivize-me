@@ -123,7 +123,9 @@ async function tickUser(admin: SupabaseClient, p: Profile, now: Date, done: stri
     .limit(50);
   for (const r of rems ?? []) {
     const rule = r as ReminderRule & { id: string; title: string; notes: string | null; next_fire_at: string | null; url: string | null };
-    if (rule.next_fire_at) {
+    const due = !!rule.next_fire_at && Date.parse(rule.next_fire_at) <= now.getTime();
+    if (rule.next_fire_at && !due) continue; // not due yet (defensive; the query already filters)
+    if (due) {
       const res = await notify(p, {
         kind: "reminder",
         dedupeKey: `rem:${rule.id}:${rule.next_fire_at}`,
@@ -139,7 +141,7 @@ async function tickUser(admin: SupabaseClient, p: Profile, now: Date, done: stri
       .from("reminders")
       .update({
         next_fire_at: next?.toISOString() ?? null,
-        last_fired_at: rule.next_fire_at ? nowIso : undefined,
+        last_fired_at: due ? nowIso : undefined,
         active: next !== null,
       })
       .eq("id", rule.id);
@@ -179,7 +181,7 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
   const { data: existing } = await admin.from("notifications").select("id").eq("user_id", p.id).eq("dedupe_key", key).maybeSingle();
   if (existing) return;
 
-  const [{ data: today }, { count: overdue }, { data: jobs }, { data: learning }] = await Promise.all([
+  const [{ data: today }, { count: overdue }, { data: jobs }, { data: learning }, { count: cardsDue }] = await Promise.all([
     admin
       .from("tasks")
       .select("title, due_time, priority")
@@ -204,6 +206,12 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
       .select("entry_date")
       .eq("user_id", p.id)
       .gte("entry_date", startOfWeek(date, p.week_starts_on)),
+    admin
+      .from("flashcards")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", p.id)
+      .eq("suspended", false)
+      .lte("due", new Date().toISOString()),
   ]);
 
   const tasks = today ?? [];
@@ -213,6 +221,7 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
     overdue ? `${overdue} overdue` : null,
     jobs?.length ? `${plural(jobs.length, "new job match")}` : null,
     `Learning ${learnDays}/${p.learning_goal_per_week} this week`,
+    cardsDue ? `${plural(cardsDue, "flashcard")} due` : null,
   ].filter(Boolean);
 
   const email =
@@ -234,7 +243,10 @@ async function morningBrief(admin: SupabaseClient, p: Profile, date: string, don
               ...(jobs?.length
                 ? [{ heading: "New job matches", items: jobs.map((j) => ({ text: `${j.title}${j.company ? ` · ${j.company}` : ""}`, meta: `${j.score}% match`, href: "/jobs" })) }]
                 : []),
-              { heading: "Learning", paragraph: `${learnDays}/${p.learning_goal_per_week} days logged this week.` },
+              {
+                heading: "Learning",
+                paragraph: `${learnDays}/${p.learning_goal_per_week} days logged this week.${cardsDue ? ` ${plural(cardsDue, "flashcard")} waiting for review.` : ""}`,
+              },
             ],
             cta: { label: "Open today", href: "/" },
           }),

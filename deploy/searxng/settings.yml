@@ -1,0 +1,14 @@
+use_default_settings: true
+
+server:
+  # Replace with the output of: openssl rand -hex 32
+  secret_key: "CHANGE_ME_TO_A_RANDOM_STRING"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  # Productivize reads results as JSON.
+  formats:
+    - html
+    - json

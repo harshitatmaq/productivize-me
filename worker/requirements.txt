@@ -1,0 +1,4 @@
+# Python side of the Scout worker (JobSpy scraper). Install:
+#   Linux/Docker: python3 -m pip install -r worker/requirements.txt
+#   Windows:      py -m pip install -r worker\requirements.txt
+python-jobspy==1.4.1

@@ -47,6 +47,7 @@ export async function scoreJobs(
   jobs: { job: RawJob; rel: number }[],
   log: (m: string) => void,
   batchSize = 8,
+  preferences?: string,
 ): Promise<{ scored: ScoredJob[]; dropped: number; providers: string[] }> {
   const brief = candidateBrief(profile);
   const scored: ScoredJob[] = [];
@@ -68,7 +69,7 @@ export async function scoreJobs(
           posted: job.posted_at?.slice(0, 10),
           source: job.source,
           url: job.needs_extraction ? job.url : undefined,
-          text: (job.description ?? "").replace(/\s+/g, " ").slice(0, 700),
+          text: (job.description ?? "").replace(/\s+/g, " ").slice(0, 1300),
         }),
       )
       .join("\n");
@@ -78,7 +79,12 @@ export async function scoreJobs(
         {
           messages: [
             { role: "system", content: SYSTEM },
-            { role: "user", content: `CANDIDATE\n${brief}\n\nJOBS (one JSON per line)\n${listing}` },
+            {
+              role: "user",
+              content: `CANDIDATE\n${brief}${
+                preferences ? `\n\nLEARNED PREFERENCES (from the candidate's 👍/👎 — weigh these)\n${preferences}` : ""
+              }\n\nJOBS (one JSON per line)\n${listing}`,
+            },
           ],
           temperature: 0.1,
           maxTokens: 2600,
@@ -106,7 +112,7 @@ export async function scoreJobs(
         const score = Math.max(0, Math.min(100, Math.round(Number(r.score) || 0)));
         scored.push({
           ...job,
-          title: job.needs_extraction && r.title ? r.title : job.title,
+          title: (job.needs_extraction || job.source === "hn") && r.title ? r.title : job.title,
           company: job.company || r.company || null,
           location: job.location || r.location || null,
           remote: job.remote ?? (typeof r.remote === "boolean" ? r.remote : null),

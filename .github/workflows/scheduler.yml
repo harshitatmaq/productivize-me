@@ -1,0 +1,32 @@
+# Alternative to Supabase pg_cron (supabase/cron.sql is the recommended scheduler).
+# Add repository secrets APP_URL (https://your-app.vercel.app) and CRON_SECRET, then
+# run it manually or uncomment the schedule below. Note: scheduled runs on a private
+# repo use GitHub Actions minutes (hourly ≈ 720 min/month of the 2,000 free).
+name: scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Which endpoint to call"
+        type: choice
+        options: [jobs, tick]
+        default: jobs
+  # schedule:
+  #   - cron: "7 * * * *"      # hourly job search
+
+jobs:
+  call:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call the app
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TASK: ${{ github.event.inputs.task || 'jobs' }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL / CRON_SECRET secrets are not set — skipping."; exit 0
+          fi
+          curl -fsS --max-time 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/$TASK?wait=1"

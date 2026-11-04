@@ -116,6 +116,34 @@ function hasWord(text: string, word: string): boolean {
   return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`, "i").test(text);
 }
 
+/** Best fraction of a target title's words found in the job title (0-1). */
+export function titleScore(jobTitle: string, titles: string[]): number {
+  const have = new Set(tokens(jobTitle));
+  let best = 0;
+  for (const target of titles) {
+    const t = tokens(target);
+    if (!t.length) continue;
+    best = Math.max(best, t.filter((x) => have.has(x)).length / t.length);
+  }
+  return best;
+}
+
+/** Which application system (or job site) a URL belongs to. */
+export function detectAts(url: string | null | undefined): string | null {
+  const u = (url ?? "").toLowerCase();
+  if (/greenhouse\.io/.test(u)) return "greenhouse";
+  if (/lever\.co/.test(u)) return "lever";
+  if (/ashbyhq\.com/.test(u)) return "ashby";
+  if (/myworkdayjobs\.com|workday/.test(u)) return "workday";
+  if (/workable\.com/.test(u)) return "workable";
+  if (/smartrecruiters\.com/.test(u)) return "smartrecruiters";
+  if (/linkedin\.com/.test(u)) return "linkedin";
+  if (/naukri\.com/.test(u)) return "naukri";
+  if (/indeed\./.test(u)) return "indeed";
+  if (/glassdoor\./.test(u)) return "glassdoor";
+  return null;
+}
+
 /**
  * Cheap keyword relevance (0-1) used to pick which new jobs are worth sending
  * to the LLM for real scoring.
@@ -159,6 +187,8 @@ export function relevance(job: RawJob, plan: SearchPlan, profile: JobProfile): n
 
 export function parseWatchCompany(input: string): WatchCompany | null {
   const s = input.trim();
+  const wd = s.match(/([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i);
+  if (wd) return { ats: "workday", slug: `${wd[1].toLowerCase()}/${wd[2]}`, name: wd[1].split(".")[0] };
   const patterns: [RegExp, WatchCompany["ats"]][] = [
     [/(?:job-)?boards(?:-api)?\.greenhouse\.io\/(?:v1\/boards\/)?([a-z0-9_-]+)/i, "greenhouse"],
     [/jobs\.lever\.co\/([a-z0-9_-]+)/i, "lever"],

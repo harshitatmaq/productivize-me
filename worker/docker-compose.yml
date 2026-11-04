@@ -1,0 +1,20 @@
+# Run from the repository root:
+#   cp .env.example .env.local      # app settings (Supabase, AI and search keys)
+#   cp worker/.env.example worker/.env   # worker settings (name, JobSpy sites, Gmail)
+#   docker compose -f worker/docker-compose.yml up -d --build
+#   docker compose -f worker/docker-compose.yml logs -f
+services:
+  scout-worker:
+    build:
+      context: ..
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env.local
+      - ./.env
+    init: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

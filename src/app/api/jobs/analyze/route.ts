@@ -2,26 +2,14 @@ import { z } from "zod";
 import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
 import { candidateBrief } from "@/lib/jobs/profile";
-import type { JobProfile } from "@/lib/jobs/types";
+import type { JobAnalysis, JobProfile } from "@/lib/jobs/types";
 import { readPage } from "@/lib/search/web";
 
 export const maxDuration = 120;
 
 const Body = z.object({ id: z.string().uuid() });
 
-export type JobAnalysis = {
-  fit_score: number;
-  summary: string;
-  strengths: string[];
-  gaps: string[];
-  resume_bullets: string[];
-  keywords: string[];
-  cover_letter: string;
-  interview_prep: string[];
-  questions_to_ask: string[];
-  generated_at: string;
-  provider?: string;
-};
+
 
 /** Deep-dive on one job: fetches the full posting and writes tailored application material. */
 export async function POST(request: Request) {

@@ -41,3 +41,36 @@ describe("parseQuickAdd", () => {
     expect(parseQuickAdd("Pay rent !!! today", ref).priority).toBe(1);
   });
 });
+
+describe("richer recurrence", () => {
+  it("every 2 weeks / every other day", () => {
+    const a = parseQuickAdd("1:1 with manager every 2 weeks", ref);
+    expect([a.recurrence, a.recurrence_interval, a.title]).toEqual(["weekly", 2, "1:1 with manager"]);
+    const b = parseQuickAdd("Water plants every other day", ref);
+    expect([b.recurrence, b.recurrence_interval, b.title]).toEqual(["daily", 2, "Water plants"]);
+  });
+
+  it("chosen weekdays", () => {
+    const r = parseQuickAdd("Gym every mon, wed and fri 7am #health", ref);
+    expect(r.recurrence).toBe("weekly");
+    expect(r.recurrence_days).toEqual([1, 3, 5]);
+    expect(r.due_date).toBe("2026-11-04"); // next Wednesday after Tue 3 Nov
+    expect(r.due_time).toBe("07:00");
+    expect(r.title).toBe("Gym");
+  });
+
+  it("keeps 'every weekday' and 'every week' working", () => {
+    expect(parseQuickAdd("Standup every weekday", ref).recurrence).toBe("weekdays");
+    const w = parseQuickAdd("Review every week", ref);
+    expect([w.recurrence, w.recurrence_days]).toEqual(["weekly", []]);
+  });
+});
+
+describe("month is not monday", () => {
+  it("every month stays monthly", () => {
+    const r = parseQuickAdd("Pay rent every month", ref);
+    expect([r.recurrence, r.recurrence_days, r.title]).toEqual(["monthly", [], "Pay rent"]);
+    const t = parseQuickAdd("Team lunch every tuesday and thursday", ref);
+    expect(t.recurrence_days).toEqual([2, 4]);
+  });
+});

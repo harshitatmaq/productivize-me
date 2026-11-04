@@ -3,7 +3,11 @@ import "server-only";
 import { env, envInt } from "@/lib/env";
 import { webSearch } from "@/lib/search/web";
 import { paceAllows, recordCall } from "@/lib/usage";
-import { domainOf, formatSalary, looksLikeListingPage, stripHtml } from "./normalize";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { CAREER_OPS_BOARDS } from "./company-seed";
+import { gmailAccounts, readGmailLabel } from "./gmail";
+import { countryForIndeed, jobspySites, mapJobspyRecord, runJobspy } from "./jobspy";
+import { domainOf, formatSalary, looksLikeListingPage, stripHtml, titleScore } from "./normalize";
 import type { RawJob, SearchPlan, WatchCompany, WebQuery } from "./types";
 
 export type SourceContext = {
@@ -14,14 +18,23 @@ export type SourceContext = {
   /** Rotating cursor (persisted per user+source) so each run tries different queries. */
   cursor: number;
   log: (msg: string) => void;
+  userId: string;
+  userEmail: string | null;
+  /** When this source last ran for this user (null = first run). */
+  lastRunAt: number | null;
+  /** Source-specific state persisted between runs (e.g. Gmail's last UID). */
+  state: Record<string, unknown>;
+  saveState: (patch: Record<string, unknown>) => void;
 };
 
 export type JobSource = {
   id: string;
   label: string;
-  kind: "free" | "key" | "search" | "ats";
+  kind: "free" | "key" | "search" | "ats" | "scrape" | "email";
   /** Minimum minutes between runs per user (be polite to free APIs). */
   minIntervalMin: number;
+  /** Needs the Scout worker (Python, IMAP or long runs) — skipped on Vercel. */
+  workerOnly?: boolean;
   configured: () => boolean;
   signupUrl?: string;
   fetch: (ctx: SourceContext) => Promise<RawJob[]>;
@@ -411,6 +424,8 @@ const serpapi: JobSource = {
 /** "3 days ago" -> ISO date. */
 export function parseRelative(s: string | undefined): string | null {
   if (!s) return null;
+  if (/today|just now/i.test(s)) return new Date().toISOString();
+  if (/yesterday/i.test(s)) return new Date(Date.now() - 86_400_000).toISOString();
   const m = s.match(/(\d+)\s*(minute|hour|day|week|month)/i);
   if (!m) return null;
   const n = Number(m[1]);
@@ -473,7 +488,7 @@ const web: JobSource = {
     const queries = plan.web_queries.length
       ? plan.web_queries
       : plan.titles.slice(0, 3).map((t) => ({ q: `${t} job ${plan.locations[0] ?? ""}`.trim(), domains: "ats" as const }));
-    const perRun = manual ? 3 : envInt("WEB_QUERIES_PER_RUN", 2);
+    const perRun = manual ? 3 : envInt("WEB_QUERIES_PER_RUN", env("SEARXNG_URL") ? 6 : 2);
     const out: RawJob[] = [];
     for (const wq of pick(queries, cursor, perRun)) {
       const domains = wq.domains ? DOMAIN_GROUPS[wq.domains] : [];
@@ -505,15 +520,83 @@ const web: JobSource = {
 };
 
 // ----------------------------------------------------------------------------
+// Hacker News "Ask HN: Who is hiring?" (monthly thread, free Algolia API)
+// ----------------------------------------------------------------------------
+
+const ROLE_WORDS = /\b(engineer|developer|scientist|manager|designer|analyst|architect|sre|devops|lead|intern|researcher|programmer|consultant|specialist|head of|director|founding)\b/i;
+
+/** "Acme | Senior Backend Engineer | Remote (US) | $150k" → structured fields. */
+export function parseHnPosting(firstLine: string): { company: string; title: string; location: string | null; remote: boolean } | null {
+  const parts = firstLine.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const company = parts[0].replace(/\(.*?\)/g, "").trim();
+  const title = parts.slice(1).find((p) => ROLE_WORDS.test(p)) ?? parts[1];
+  const location = parts.slice(1).find((p) => p !== title && /remote|onsite|on-site|hybrid|,|\b[A-Z]{2}\b|india|bangalore|bengaluru|london|berlin|york|francisco|europe|usa|us\b/i.test(p)) ?? null;
+  return { company, title: title.slice(0, 200), location, remote: /remote/i.test(firstLine) };
+}
+
+const hn: JobSource = {
+  id: "hn",
+  label: "Hacker News — Who is hiring?",
+  kind: "free",
+  minIntervalMin: 720,
+  configured: () => true,
+  async fetch({ plan }) {
+    const stories = await getJson<{ hits?: { objectID: string; title: string }[] }>(
+      "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10",
+    );
+    const story = (stories.hits ?? []).find((h) => /who is hiring/i.test(h.title));
+    if (!story) return [];
+    const comments = await getJson<{ hits?: { objectID: string; comment_text?: string; parent_id?: number; created_at?: string }[] }>(
+      `https://hn.algolia.com/api/v1/search?tags=comment,story_${story.objectID}&hitsPerPage=1000`,
+    );
+    const words = [...plan.titles, ...plan.keywords].flatMap((t) => t.toLowerCase().split(/\s+/)).filter((w) => w.length > 2);
+    const out: RawJob[] = [];
+    for (const c of comments.hits ?? []) {
+      if (String(c.parent_id) !== story.objectID || !c.comment_text) continue;
+      const text = stripHtml(c.comment_text, 4000);
+      const lower = text.toLowerCase();
+      if (!words.some((w) => lower.includes(w))) continue;
+      const parsed = parseHnPosting(text.split("\n")[0]);
+      if (!parsed) continue;
+      out.push({
+        source: "hn",
+        external_id: c.objectID,
+        url: `https://news.ycombinator.com/item?id=${c.objectID}`,
+        title: parsed.title,
+        company: parsed.company,
+        location: parsed.location,
+        remote: parsed.remote,
+        description: text,
+        posted_at: c.created_at ?? null,
+      });
+    }
+    return out;
+  },
+};
+
+// ----------------------------------------------------------------------------
 // Company career pages on public ATS APIs (no key)
 // ----------------------------------------------------------------------------
 
-async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
+// Boards are shared by both users and re-used for ~50 minutes within a worker process.
+const boardCache = new Map<string, { at: number; jobs: RawJob[] }>();
+
+export async function fetchAtsCached(c: WatchCompany, opts: { light?: boolean } = {}): Promise<RawJob[]> {
+  const key = `${c.ats}:${c.slug.toLowerCase()}:${opts.light ? "l" : "f"}`;
+  const hit = boardCache.get(key);
+  if (hit && Date.now() - hit.at < 50 * 60_000) return hit.jobs;
+  const jobs = await fetchAts(c, opts);
+  boardCache.set(key, { at: Date.now(), jobs });
+  return jobs;
+}
+
+async function fetchAts(c: WatchCompany, opts: { light?: boolean } = {}): Promise<RawJob[]> {
   const name = c.name ?? c.slug;
   switch (c.ats) {
     case "greenhouse": {
       const d = await getJson<{ jobs?: Record<string, unknown>[] }>(
-        `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(c.slug)}/jobs?content=true`,
+        `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(c.slug)}/jobs${opts.light ? "" : "?content=true"}`,
       );
       return (d.jobs ?? []).map((j) => ({
         source: "greenhouse",
@@ -582,6 +665,33 @@ async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
         posted_at: toIso(j.published_on as string),
       }));
     }
+    case "workday": {
+      const [host, site] = c.slug.split("/");
+      const tenant = host.split(".")[0];
+      const out: RawJob[] = [];
+      const queries = [...new Set((c as WatchCompany & { queries?: string[] }).queries ?? [""])].slice(0, 2);
+      for (const searchText of queries) {
+        const d = await getJson<{ jobPostings?: Record<string, unknown>[] }>(`https://${host}/wday/cxs/${tenant}/${site}/jobs`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText }),
+        });
+        for (const j of d.jobPostings ?? []) {
+          if (!j.externalPath) continue;
+          out.push({
+            source: "workday",
+            external_id: String(j.externalPath),
+            url: `https://${host}/${site}${j.externalPath}`,
+            title: String(j.title),
+            company: name,
+            location: (j.locationsText as string) ?? null,
+            remote: /remote/i.test(String(j.locationsText ?? "")),
+            posted_at: parseRelative(j.postedOn as string),
+          });
+        }
+      }
+      return out;
+    }
     case "smartrecruiters": {
       const d = await getJson<{ content?: Record<string, unknown>[] }>(
         `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(c.slug)}/postings?limit=100`,
@@ -605,12 +715,14 @@ async function fetchAts(c: WatchCompany): Promise<RawJob[]> {
 
 const ats: JobSource = {
   id: "ats",
-  label: "Watched companies (Greenhouse, Lever, Ashby, Workable, SmartRecruiters)",
+  label: "Watched companies (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Workday)",
   kind: "ats",
   minIntervalMin: 120,
   configured: () => true,
-  async fetch({ watch, log }) {
-    const results = await Promise.allSettled(watch.slice(0, 25).map(fetchAts));
+  async fetch({ watch, log, plan }) {
+    // Workday boards are searched by title instead of listing everything.
+    const withQueries = watch.slice(0, 30).map((c) => (c.ats === "workday" ? { ...c, queries: plan.titles.slice(0, 2) } : c));
+    const results = await Promise.allSettled(withQueries.map((c) => fetchAtsCached(c)));
     const out: RawJob[] = [];
     results.forEach((r, i) => {
       if (r.status === "fulfilled") out.push(...r.value);
@@ -620,10 +732,167 @@ const ats: JobSource = {
   },
 };
 
-export const JOB_SOURCES: JobSource[] = [web, jsearch, serpapi, adzuna, jooble, ats, remotive, himalayas, remoteok, jobicy, arbeitnow];
+// ----------------------------------------------------------------------------
+// Curated companies: career-ops' MIT company list + India-focused companies
+// whose public boards the worker discovers daily (see company-seed.ts).
+// ----------------------------------------------------------------------------
+
+async function seedBoards(): Promise<WatchCompany[]> {
+  const { data } = await supabaseAdmin().from("source_state").select("data").eq("key", "global:seed-boards").maybeSingle();
+  const discovered = ((data?.data as { boards?: WatchCompany[] })?.boards ?? []).filter(Boolean);
+  const seen = new Set<string>();
+  return [...discovered, ...CAREER_OPS_BOARDS].filter((b) => {
+    const k = `${b.ats}:${b.slug.toLowerCase()}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+const seed: JobSource = {
+  id: "seed",
+  label: "Curated companies (career-ops list + India product companies)",
+  kind: "ats",
+  minIntervalMin: 120,
+  workerOnly: true,
+  configured: () => true,
+  async fetch({ plan, log }) {
+    const boards = await seedBoards();
+    const out: RawJob[] = [];
+    let failed = 0;
+    for (let i = 0; i < boards.length; i += 12) {
+      const results = await Promise.allSettled(boards.slice(i, i + 12).map((b) => fetchAtsCached(b, { light: true })));
+      for (const r of results) {
+        if (r.status === "rejected") {
+          failed++;
+          continue;
+        }
+        // Boards list every role; keep only titles that match this person's search plan.
+        for (const j of r.value) if (titleScore(j.title, plan.titles) >= 0.6) out.push(j);
+      }
+    }
+    if (failed) log(`seed: ${failed}/${boards.length} boards unavailable`);
+    return out.slice(0, 400);
+  },
+};
+
+// ----------------------------------------------------------------------------
+// JobSpy (LinkedIn, Indeed, Glassdoor, Naukri) — public listings, no login.
+// Which sites a worker scrapes is set by JOBSPY_SITES on that worker.
+// ----------------------------------------------------------------------------
+
+const JOBSPY_LABELS: Record<string, string> = { linkedin: "LinkedIn", indeed: "Indeed", glassdoor: "Glassdoor", naukri: "Naukri" };
+
+function jobspySource(site: "linkedin" | "indeed" | "glassdoor" | "naukri"): JobSource {
+  return {
+    id: `jobspy_${site}`,
+    label: `${JOBSPY_LABELS[site]} via JobSpy (public listings, no login)`,
+    kind: "scrape",
+    minIntervalMin: site === "glassdoor" ? 120 : 55,
+    workerOnly: true,
+    configured: () => jobspySites().includes(site),
+    async fetch({ plan, cursor, manual, lastRunAt }) {
+      const india = plan.countries.includes("in") || plan.countries.length === 0;
+      const location =
+        plan.remote === "remote"
+          ? india
+            ? "India"
+            : ""
+          : (plan.locations.find((l) => !/remote/i.test(l)) ?? (india ? "India" : ""));
+      // Only ask for what's new since the last run (+1h overlap); first run looks back 3 days.
+      const hours = lastRunAt ? Math.min(72, Math.max(2, Math.ceil((Date.now() - lastRunAt) / 3_600_000) + 1)) : 72;
+      const out: RawJob[] = [];
+      // Sequential and small: gentle on LinkedIn's rate limits.
+      for (const title of pick(plan.titles, cursor, manual ? 3 : 2)) {
+        const records = await runJobspy({
+          site,
+          search_term: title,
+          location,
+          is_remote: plan.remote === "remote",
+          results_wanted: site === "linkedin" ? 20 : 30,
+          hours_old: hours,
+          country_indeed: countryForIndeed(plan.countries[0]),
+        });
+        for (const r of records) {
+          const job = mapJobspyRecord(r, site);
+          if (job) out.push(job);
+        }
+      }
+      return out;
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Gmail "Productivize" label: job-alert emails from LinkedIn, Naukri, Indeed…
+// ----------------------------------------------------------------------------
+
+const gmail: JobSource = {
+  id: "gmail",
+  label: "Gmail job alerts (Productivize label)",
+  kind: "email",
+  minIntervalMin: 30,
+  workerOnly: true,
+  configured: () => gmailAccounts().size > 0,
+  async fetch({ userId, userEmail, state, saveState, log }) {
+    const pass = userEmail ? gmailAccounts().get(userEmail.toLowerCase()) : undefined;
+    if (!pass) {
+      log("gmail: no app password for this user on the worker (GMAIL_ACCOUNTS)");
+      return [];
+    }
+    const batch = await readGmailLabel(userEmail!, pass, {
+      lastUid: Number(state.lastUid ?? 0) || undefined,
+      uidValidity: (state.uidValidity as string) ?? undefined,
+    });
+    saveState({ lastUid: batch.lastUid, uidValidity: batch.uidValidity, lastSyncAt: new Date().toISOString(), lastEmails: batch.emails.length });
+    if (batch.emails.length) {
+      await supabaseAdmin()
+        .from("email_ingest")
+        .upsert(
+          batch.emails.map((e) => ({
+            user_id: userId,
+            message_id: e.messageId,
+            kind: e.kind,
+            sender: e.from,
+            subject: e.subject,
+            received_at: e.date,
+            parsed: { jobs: e.jobs },
+          })),
+          { onConflict: "user_id,message_id", ignoreDuplicates: true },
+        );
+      log(`gmail: ${batch.emails.length} new emails, ${batch.jobs.length} job links`);
+    }
+    return batch.jobs;
+  },
+};
+
+export const JOB_SOURCES: JobSource[] = [
+  web,
+  gmail,
+  jobspySource("linkedin"),
+  jobspySource("naukri"),
+  jobspySource("indeed"),
+  jobspySource("glassdoor"),
+  seed,
+  jsearch,
+  serpapi,
+  adzuna,
+  jooble,
+  ats,
+  hn,
+  remotive,
+  himalayas,
+  remoteok,
+  jobicy,
+  arbeitnow,
+];
+
+/** Sources suitable for a one-off live search (fast, query-driven). */
+export const LIVE_SOURCE_IDS = ["web", "jobspy_linkedin", "jobspy_naukri", "jobspy_indeed", "seed", "jsearch", "serpapi", "adzuna", "jooble", "remotive", "himalayas"];
 
 export function jobSourceSummary() {
   return JOB_SOURCES.map((s) => ({
+    workerOnly: !!s.workerOnly,
     id: s.id,
     label: s.label,
     kind: s.kind,
