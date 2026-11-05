@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, FileUp, Loader2, RotateCcw, Sparkles, Wand2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -108,9 +109,11 @@ export function ScoutChat({ row, onFinalized }: { row: JobProfileRow | null | un
           <div className="text-[13.5px] font-medium text-fg">Scout · your job-search agent</div>
           <div className="text-[12px] text-muted">{ready ? "Profile ready · keep chatting to refine it" : `Profile ${progress}% complete`}</div>
         </div>
-        <Button size="icon-sm" variant="ghost" title="Restart interview" onClick={() => send(undefined, true)} disabled={busy}>
-          <RotateCcw className="h-3.5 w-3.5" />
-        </Button>
+        <Tip content="Restart the interview">
+          <Button size="icon-sm" variant="ghost" aria-label="Restart interview" onClick={() => send(undefined, true)} disabled={busy}>
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+        </Tip>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -161,9 +164,11 @@ export function ScoutChat({ row, onFinalized }: { row: JobProfileRow | null | un
       <div className="border-t border-line p-3">
         <div className="flex items-end gap-2 rounded-xl border border-line bg-panel-2 p-1.5 focus-within:border-accent/60">
           <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-          <Button size="icon" variant="ghost" title="Upload resume (PDF)" onClick={() => fileRef.current?.click()} loading={uploading}>
-            {!uploading ? <FileUp className="h-4 w-4" /> : null}
-          </Button>
+          <Tip content="Upload your resume (PDF)">
+            <Button size="icon" variant="ghost" aria-label="Upload resume (PDF)" onClick={() => fileRef.current?.click()} loading={uploading}>
+              {!uploading ? <FileUp className="h-4 w-4" /> : null}
+            </Button>
+          </Tip>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -177,9 +182,11 @@ export function ScoutChat({ row, onFinalized }: { row: JobProfileRow | null | un
             placeholder="Answer Scout, paste your resume, or ask for changes…"
             className="max-h-40 min-h-8 flex-1 resize-none bg-transparent py-1.5 text-[13.5px] text-fg outline-none placeholder:text-faint"
           />
-          <Button size="icon" variant="primary" onClick={() => send(input)} disabled={!input.trim() || busy} aria-label="Send">
-            <ArrowUp className="h-4 w-4" />
-          </Button>
+          <Tip content="Send (Enter)">
+            <Button size="icon" variant="primary" onClick={() => send(input)} disabled={!input.trim() || busy} aria-label="Send">
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          </Tip>
         </div>
         {ready ? (
           <div className="mt-2 flex justify-end">

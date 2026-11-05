@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2, Radar, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -216,13 +217,15 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
               <span key={`${c.ats}:${c.slug}`} className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line bg-panel-2 pl-2 pr-1 text-[12.5px] text-fg-2">
                 {c.name ?? c.slug}
                 <span className="text-[11px] text-faint">{c.ats}{c.auto ? " · auto" : ""}</span>
-                <button
-                  className="rounded p-0.5 text-faint hover:text-danger"
-                  onClick={() => updateRow.mutate({ watch_companies: row.watch_companies.filter((x) => !(x.ats === c.ats && x.slug === c.slug)) })}
-                  aria-label="Remove"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
+                <Tip content={`Stop watching ${c.name ?? c.slug}`}>
+                  <button
+                    className="rounded p-0.5 text-faint hover:text-danger"
+                    onClick={() => updateRow.mutate({ watch_companies: row.watch_companies.filter((x) => !(x.ats === c.ats && x.slug === c.slug)) })}
+                    aria-label={`Remove ${c.name ?? c.slug}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </Tip>
               </span>
             ))}
           </div>

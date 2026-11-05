@@ -14,7 +14,8 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 - **Voice quick-add, calendar feed, share-to-app**: speak a task; subscribe to your tasks and reminders in Google/Apple Calendar; on Android, share a job from LinkedIn/Naukri straight into the tracker.
 - **Smarter job search**: semantic matching (free embeddings), 👍/👎 that teach Scout your taste, full descriptions read before scoring, Hacker News "Who is hiring?", Workday career sites, auto-discovered boards for your dream companies, follow-up tasks a week after you apply, and a tailored one-click resume PDF.
 - **Flashcards**: turn learning entries into FSRS spaced-repetition cards; job-search gaps become learning suggestions.
-- **Together**: opt-in weekly numbers for the two of you, with cheer and nudge buttons.
+- **Together**: shared dashboards you invite people to by email. Share copies of tasks, jobs, learning notes, flashcards and interests (*Share to…* everywhere), keep shared lists, comment and react, and see each other's weekly numbers.
+- **Interests**: what Scout knows about you — career skills, learning topics and hobbies, each with a strength (from your activity) and a job relevance score that decides whether Scout uses it for job search. Scout suggests new ones and asks short check-in questions (max 2 a day).
 
 ## Stack
 
@@ -43,7 +44,7 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 ### 1. Supabase (free)
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql). All are safe to re-run.
+2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql), then [`0004_sharing_interests.sql`](supabase/migrations/0004_sharing_interests.sql). All are safe to re-run.
 3. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off "Allow new users to sign up"**. Only accounts you create can log in.
 4. Create the two accounts, either in **Authentication → Users → Add user** (tick "Auto confirm") or from the command line after step 3 below:
    ```bash
@@ -115,7 +116,8 @@ The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alter
   Then set `EMBED_FUNCTION_ENABLED=true` and `EMBEDDINGS_PROVIDER_ORDER=supabase`.
 - **Unlimited web search:** [deploy/searxng](deploy/searxng/README.md) (Oracle Cloud Always Free + Caddy).
 - **Calendar:** Settings → Calendar feed → *Add to Google Calendar* / *Open in Apple Calendar*.
-- **Together:** each of you turns on *Share my weekly progress* (Settings or the Together page).
+- **Together:** create a shared dashboard and invite the other person by email (Together → New shared dashboard). Invite emails go out through the Gmail SMTP settings above; without them the app shows a one-time link you can send yourself. Turn on *Share my weekly progress* to see each other's totals.
+- **Invite links** expire after Supabase's email-link lifetime (default 1 hour; you can raise it to 24 hours in Supabase under **Authentication → Sign In / Providers → Email** (Email OTP expiration)). An expired link is fine: the sign-in page has *Email me a sign-in link*.
 
 ### 7. Scout worker (recommended for job search)
 
@@ -154,7 +156,8 @@ Setup for Windows, Oracle (Docker) and the Gmail label: [worker/README.md](worke
 ## Security
 
 - Every table has Row Level Security: each user can only read or write their own rows. The public portfolio is readable only when you publish it.
-- Sign-ups are disabled in Supabase, and `ALLOWED_EMAILS` is enforced by the proxy and by every API route.
+- Sign-ups are disabled in Supabase. Access is `ALLOWED_EMAILS` plus people invited to a shared dashboard (their account is marked `app_metadata.access = "invited"` by the server), enforced by the proxy and by every API route.
+- Shared dashboards only ever hold copies; row-level security limits every shared table to its members, and weekly progress is only visible between people who share a dashboard.
 - API keys live only in server environment variables. The browser only gets the Supabase publishable key and the VAPID public key.
 - Cron endpoints require `CRON_SECRET`.
 

@@ -18,6 +18,14 @@ export async function POST(request: Request) {
     const me = people?.find((p) => p.id === user.id);
     const them = people?.find((p) => p.id === parsed.data.to);
     if (!me?.share_progress || !them?.share_progress) throw new HttpError(403, "Both of you need progress sharing turned on.");
+    // Only between people who share a dashboard.
+    const { data: mine } = await admin.from("space_members").select("space_id").eq("user_id", user.id);
+    const { count } = await admin
+      .from("space_members")
+      .select("space_id", { count: "exact", head: true })
+      .eq("user_id", parsed.data.to)
+      .in("space_id", (mine ?? []).map((m) => m.space_id as string));
+    if (!count) throw new HttpError(403, "You can only cheer people you share a dashboard with.");
     const name = (me.full_name || me.email || "Your buddy").split(" ")[0];
     const day = localDateStr(new Date(), safeTz(them.timezone));
     const r = await notify(them, {

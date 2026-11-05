@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { BellRing, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { QuickAdd } from "@/components/tasks/quick-add";
@@ -102,12 +103,16 @@ export function CalendarView() {
             }}>
             Today
           </Button>
+          <Tip content="Previous month">
           <Button size="icon-sm" variant="ghost" onClick={() => shift(-1)} aria-label="Previous month">
             <ChevronLeft className="h-4 w-4" />
           </Button>
+          </Tip>
+          <Tip content="Next month">
           <Button size="icon-sm" variant="ghost" onClick={() => shift(1)} aria-label="Next month">
             <ChevronRight className="h-4 w-4" />
           </Button>
+          </Tip>
         </div>
       </div>
 
@@ -131,6 +136,8 @@ export function CalendarView() {
                 <button
                   key={d}
                   onClick={() => setSelected(d)}
+                  aria-label={`${new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}${open.length ? ` · ${open.length} open task${open.length > 1 ? "s" : ""}` : ""}${rems.length ? ` · ${rems.length} reminder${rems.length > 1 ? "s" : ""}` : ""}`}
+                  aria-pressed={isSel}
                   className={cn(
                     "group relative flex min-h-[64px] flex-col items-stretch gap-1 border-line p-1.5 text-left transition-colors lg:min-h-[112px]",
                     i % 7 !== 6 && "border-r",

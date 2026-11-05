@@ -1,16 +1,18 @@
 "use client";
 
-import { AlertTriangle, Check, Copy, ExternalLink, MapPin, Sparkles, Trash2, Wallet, Wifi } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink, Lightbulb, MapPin, Share2, Sparkles, Trash2, Wallet, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useResettableState } from "@/lib/hooks";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Tip } from "@/components/ui/menu";
+import { openShare, shareJob } from "@/lib/share";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Badge, Segmented } from "@/components/ui/misc";
 import { useDeleteJob, useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
-import { api, timeAgo } from "@/lib/utils";
+import { api, cn, timeAgo } from "@/lib/utils";
 import type { JobAnalysis } from "@/lib/jobs/types";
 import { CompanyLogo, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
@@ -103,9 +105,16 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
       }
       footer={
         <>
-          <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => { del.mutate(job.id); onClose(); }} aria-label="Delete job">
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <Tip content="Delete job">
+            <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => { del.mutate(job.id); onClose(); }} aria-label="Delete job">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </Tip>
+          <Tip content="Share to a shared dashboard">
+            <Button variant="ghost" onClick={() => openShare(shareJob(job))} aria-label="Share to…">
+              <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
+            </Button>
+          </Tip>
           <div className="mr-auto flex items-center">
             <JobFeedback job={job} />
           </div>
@@ -166,6 +175,27 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
             <section>
               <h4 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted">Why it fits</h4>
               <List items={job.reasons} icon={<Check className="h-3.5 w-3.5 text-success" />} />
+            </section>
+          ) : null}
+          {job.interest_matches?.length ? (
+            <section>
+              <h4 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted">Your interests it uses</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {job.interest_matches.map((m) => (
+                  <Tip key={m.id} content={m.relevance >= 70 ? "Job-relevant interest — counted in the match" : "Side interest — a small bonus"}>
+                    <a
+                      href="/interests"
+                      className={cn(
+                        "inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[12px]",
+                        m.relevance >= 70 ? "border-success/30 text-success" : "border-warning/30 text-warning",
+                      )}
+                    >
+                      <Lightbulb className="h-3 w-3" /> {m.name}
+                      <span className="tabular-nums text-faint">{m.relevance}</span>
+                    </a>
+                  </Tip>
+                ))}
+              </div>
             </section>
           ) : null}
           {job.concerns?.length ? (

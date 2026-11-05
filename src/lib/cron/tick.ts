@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { refreshMemory } from "@/lib/memory/refresh";
 import { notify, type NotifyProfile } from "@/lib/notify";
 import { renderEmail } from "@/lib/notify/templates";
 import { computeNextFire, formatTime12, type ReminderRule } from "@/lib/recurrence";
@@ -68,6 +69,21 @@ export async function runTick(now = new Date()) {
       console.error(`[tick] ${p.id}`, e);
     }
     results[p.email ?? p.id] = done;
+  }
+  // Career memory: refresh one person per tick whose interests haven't been looked at for 12h.
+  try {
+    const { data: due } = await admin
+      .from("job_profiles")
+      .select("user_id, memory_at")
+      .or(`memory_at.is.null,memory_at.lt.${new Date(now.getTime() - 12 * 3_600_000).toISOString()}`)
+      .order("memory_at", { ascending: true, nullsFirst: true })
+      .limit(1);
+    if (due?.[0]) {
+      const r = await refreshMemory(due[0].user_id as string);
+      results[`memory:${due[0].user_id}`] = [`interests updated ${r.updated}, suggested ${r.suggested.length}, questions ${r.questions}`];
+    }
+  } catch (e) {
+    console.warn("[tick] memory refresh skipped:", (e as Error).message);
   }
   // Housekeeping: keep the in-app inbox small.
   await admin

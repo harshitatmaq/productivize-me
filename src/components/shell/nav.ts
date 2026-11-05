@@ -6,6 +6,7 @@ import {
   Flame,
   GraduationCap,
   HeartHandshake,
+  Lightbulb,
   type LucideIcon,
   Settings,
   Sun,
@@ -22,8 +23,9 @@ export const NAV: NavItem[] = [
   { href: "/reminders", label: "Reminders", icon: BellRing, group: "plan" },
   { href: "/jobs", label: "Jobs", icon: Briefcase, group: "grow", key: "jobs" },
   { href: "/learning", label: "Learning", icon: GraduationCap, group: "grow", key: "learning" },
+  { href: "/interests", label: "Interests", icon: Lightbulb, group: "grow", key: "interests" },
   { href: "/portfolio", label: "Portfolio", icon: UserRound, group: "grow" },
-  { href: "/together", label: "Together", icon: HeartHandshake, group: "grow" },
+  { href: "/together", label: "Together", icon: HeartHandshake, group: "grow", key: "together" },
   { href: "/settings", label: "Settings", icon: Settings, group: "system" },
 ];
 

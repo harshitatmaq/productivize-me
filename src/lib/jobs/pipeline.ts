@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { discoverBoards, type DiscoveryLog } from "./discover";
 import { fetchFullDescription } from "./enrich";
 import { dedupeKey, detectAts, domainOf, hash, normalizeUrl, relevance } from "./normalize";
+import { applyInterestsToPlan, interestBonus, interestContext, matchInterests, type InterestRow } from "@/lib/memory/interests";
 import { buildSearchPlan } from "./profile";
 import { feedbackContext, semanticRank, type Candidate } from "./rank";
 import { scoreJobs } from "./scoring";
@@ -161,8 +162,16 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
   try {
     // 3. Plan: the live query's own plan, or the daily-refreshed profile plan + saved searches.
     let plan: SearchPlan;
+    // Interests: confirmed, job-relevant ones steer search + scoring; "not interested" ones are excluded.
+    const { data: interestRows } = await admin
+      .from("interests")
+      .select("id, name, kind, status, job_use, job_relevance, strength")
+      .eq("user_id", userId)
+      .in("status", ["active", "not_interested"]);
+    const interests = (interestRows ?? []) as InterestRow[];
     if (live && opts.planOverride) {
-      plan = opts.planOverride;
+      // Your own words decide what to look for; only exclusions apply.
+      plan = applyInterestsToPlan(opts.planOverride, interests, { keywords: false });
     } else {
       plan = jp!.search_plan as SearchPlan;
       const stale =
@@ -178,6 +187,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
         log(`search plan refreshed: ${plan.titles.join(", ")}`);
       }
       plan = await withSavedSearches(admin, userId, plan);
+      plan = applyInterestsToPlan(plan, interests);
 
       // Dream companies → public boards (probed once; misses retried monthly).
       if (profile.target_companies?.length) {
@@ -290,7 +300,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     }
     if (enriched) log(`fetched full descriptions for ${enriched} jobs`);
 
-    const preferences = await feedbackContext(admin, userId);
+    const preferences = [await feedbackContext(admin, userId), interestContext(interests)].filter(Boolean).join("\n") || undefined;
     const vectorFor = new Map(ranked.map((c) => [c.job.url, c]));
     const { scored, dropped, providers } = await scoreJobs(profile, ranked, log, 8, preferences);
     stats.scored = scored.length;
@@ -324,7 +334,13 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
           salary: j.salary ?? null,
           description: j.description?.slice(0, 6000) ?? null,
           posted_at: j.posted_at ?? null,
-          score: j.score,
+          // interest_matches only once you have interests (i.e. migration 0004 is in).
+          ...(() => {
+            const matches = interests.length ? matchInterests(j, interests) : [];
+            const out: { score: number; interest_matches?: typeof matches } = { score: Math.min(100, j.score + interestBonus(matches)) };
+            if (interests.length) out.interest_matches = matches;
+            return out;
+          })(),
           verdict: j.verdict,
           reasons: j.reasons,
           concerns: j.concerns,

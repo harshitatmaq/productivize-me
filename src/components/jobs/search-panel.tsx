@@ -151,6 +151,7 @@ export function SearchPanel({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) =>
             aria-label="Describe the jobs you want"
           />
           <div className="absolute bottom-2.5 left-4 text-[11px] text-faint">Searches what Scout has already found, then the live web.</div>
+          <Tip content="Search (Enter)">
           <button
             type="submit"
             disabled={q.trim().length < 2 || run.isPending}
@@ -159,6 +160,7 @@ export function SearchPanel({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) =>
           >
             {run.isPending ? <Radar className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
           </button>
+          </Tip>
         </form>
 
         {!active && !run.isPending ? (

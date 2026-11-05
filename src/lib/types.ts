@@ -161,6 +161,8 @@ export type Job = {
   /** Direct application link (company ATS) when it differs from the listing. */
   apply_url: string | null;
   ats: string | null;
+  /** Your interests this job mentions (with their job relevance at the time). */
+  interest_matches: { id: string; name: string; relevance: number }[];
   /** Set when the job was found by a "Search & ask Scout" query. */
   search_id: string | null;
   created_at: string;
@@ -249,4 +251,88 @@ export type BuddyStats = {
   applications_week: number;
   focus_minutes_week: number;
   last_active: string | null;
+};
+
+// ---------------------------------------------------------------------------
+// Shared dashboards ("spaces")
+// ---------------------------------------------------------------------------
+export type Space = { id: string; name: string; emoji: string; owner_id: string; created_at: string; updated_at: string };
+export type SpacePerson = { user_id: string; name: string; email: string | null; role: "owner" | "member"; joined_at: string };
+export type SpaceInvite = {
+  id: string;
+  space_id: string;
+  email: string;
+  invited_by: string | null;
+  status: "pending" | "accepted" | "declined" | "revoked";
+  created_at: string;
+};
+export type ShareKind = "task" | "job" | "learning" | "link" | "flashcards" | "interest" | "note";
+export type SpaceItem = {
+  id: string;
+  space_id: string;
+  kind: ShareKind;
+  title: string;
+  body: string | null;
+  payload: Record<string, unknown>;
+  note: string | null;
+  shared_by: string | null;
+  source_id: string | null;
+  done: boolean;
+  done_by: string | null;
+  done_at: string | null;
+  status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type SpaceComment = { id: string; space_id: string; item_id: string; user_id: string; body: string; created_at: string };
+export type SpaceReaction = { item_id: string; space_id: string; user_id: string; emoji: string; created_at: string };
+export type SpaceList = { id: string; space_id: string; title: string; created_by: string | null; sort: number; created_at: string };
+export type SpaceListItem = {
+  id: string;
+  list_id: string;
+  space_id: string;
+  text: string;
+  done: boolean;
+  done_by: string | null;
+  done_at: string | null;
+  created_by: string | null;
+  sort: number;
+  created_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Interests + career memory
+// ---------------------------------------------------------------------------
+export type InterestKind = "career" | "learning" | "hobby";
+export type InterestEvidence = { type: string; id?: string; label: string; at?: string; minutes?: number };
+export type Interest = {
+  id: string;
+  name: string;
+  kind: InterestKind;
+  stage: "curious" | "learning" | "using" | "strong";
+  strength: number;
+  job_relevance: number | null;
+  relevance_reason: string | null;
+  job_use: "auto" | "always" | "never";
+  status: "active" | "suggested" | "not_interested";
+  source: "manual" | "scout";
+  evidence: InterestEvidence[];
+  evidence_count: number;
+  minutes: number;
+  notes: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type MemoryQuestion = {
+  id: string;
+  interest_id: string | null;
+  kind: "confirm_interest" | "job_use" | "exclude_term";
+  question: string;
+  detail: string | null;
+  term: string | null;
+  status: "pending" | "answered" | "dismissed";
+  snooze_until: string | null;
+  shown_on: string | null;
+  created_at: string;
 };

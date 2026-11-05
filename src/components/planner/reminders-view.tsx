@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { BellRing, CalendarClock, GraduationCap, Moon, MoreHorizontal, Pencil, Plus, Sunrise, Trash2, CalendarCheck, CalendarRange } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -77,7 +78,7 @@ function BuiltIn({ profile }: { profile: Profile }) {
           disabled={!profile[enabledKey]}
         />
       ) : null}
-      <Switch checked={Boolean(profile[enabledKey])} onChange={(v) => set({ [enabledKey]: v } as Partial<Profile>)} />
+      <Switch checked={Boolean(profile[enabledKey])} onChange={(v) => set({ [enabledKey]: v } as Partial<Profile>)} ariaLabel={title} />
     </div>
   );
 
@@ -92,7 +93,7 @@ function BuiltIn({ profile }: { profile: Profile }) {
         timeKey: "day_end_time",
         extra: (
           <label className="mt-2 flex items-center gap-2 text-[12px] text-muted">
-            <Switch checked={profile.auto_carry_forward} onChange={(v) => set({ auto_carry_forward: v })} />
+            <Switch checked={profile.auto_carry_forward} onChange={(v) => set({ auto_carry_forward: v })} ariaLabel="Carry forward automatically" />
             Carry forward automatically instead of asking
           </label>
         ),
@@ -121,7 +122,7 @@ function BuiltIn({ profile }: { profile: Profile }) {
               days/week
             </span>
             <label className="flex items-center gap-2">
-              <Switch checked={profile.learning_skip_when_goal_met} onChange={(v) => set({ learning_skip_when_goal_met: v })} />
+              <Switch checked={profile.learning_skip_when_goal_met} onChange={(v) => set({ learning_skip_when_goal_met: v })} ariaLabel="Stop nudging once the weekly goal is met" />
               Stop nudging once the weekly goal is met
             </label>
           </div>
@@ -236,10 +237,15 @@ export function RemindersView() {
                   {r.last_fired_at ? <span className="text-faint"> · last {timeAgo(r.last_fired_at)}</span> : null}
                 </div>
               </div>
-              <Switch checked={r.active} onChange={(v) => toggle(r, v)} />
+              <Tip content={r.active ? "On — tap to pause" : "Paused — tap to turn on"}>
+                <span className="inline-flex">
+                  <Switch checked={r.active} onChange={(v) => toggle(r, v)} ariaLabel={`${r.title}: ${r.active ? "on" : "paused"}`} />
+                </span>
+              </Tip>
               <Menu
+                label="More actions — edit, test, delete"
                 trigger={
-                  <button className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="More">
+                  <button className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="More actions">
                     <MoreHorizontal className="h-4 w-4" />
                   </button>
                 }

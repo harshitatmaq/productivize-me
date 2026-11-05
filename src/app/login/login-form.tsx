@@ -19,8 +19,29 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(
-    params.get("error") === "not_allowed" ? "This account isn't on the allow-list for this app." : null,
+    params.get("error") === "not_allowed"
+      ? "This account isn't on the allow-list for this app."
+      : params.get("error") === "link_expired"
+        ? "That link has expired or was already used. Enter your email below and choose “Email me a sign-in link”."
+        : null,
   );
+  const [linkSent, setLinkSent] = useState<string | null>(null);
+  const [sendingLink, setSendingLink] = useState(false);
+
+  const emailLink = async () => {
+    if (!email.trim().includes("@")) return setError("Enter your email first.");
+    setSendingLink(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/email-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
+      const j = (await res.json()) as { message?: string };
+      setLinkSent(j.message ?? "Check your inbox.");
+    } catch {
+      setError("Couldn't send the link. Try again in a minute.");
+    } finally {
+      setSendingLink(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,12 +80,19 @@ export function LoginForm() {
           <Input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
         </Field>
         <Field label="Password">
-          <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+          <Input type="password" autoComplete="current-password" required={!sendingLink} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
         </Field>
         {error ? <p className="rounded-lg bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p> : null}
         <Button type="submit" variant="primary" size="lg" className="w-full" loading={loading} disabled={!configured}>
           Sign in <ArrowRight className="h-4 w-4" />
         </Button>
+        {linkSent ? (
+          <p className="rounded-lg bg-success/10 px-3 py-2 text-center text-[12.5px] text-success">{linkSent}</p>
+        ) : (
+          <button type="button" onClick={emailLink} disabled={sendingLink || !configured} className="w-full text-center text-[12.5px] text-muted transition-colors hover:text-fg disabled:opacity-50">
+            {sendingLink ? "Sending…" : "Forgot password or invited? Email me a sign-in link"}
+          </button>
+        )}
       </form>
       <p className="mt-5 flex items-center justify-center gap-1.5 text-center text-[12px] text-faint">
         <Lock className="h-3 w-3" /> Private app · invite-only accounts

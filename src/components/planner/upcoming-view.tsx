@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { CalendarRange, Inbox, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { QuickAdd } from "@/components/tasks/quick-add";
@@ -22,13 +23,15 @@ function DaySection({ date, tasks, today }: { date: string; tasks: Task[]; today
         <h2 className={cn("text-[13.5px] font-semibold", isToday ? "text-accent" : "text-fg")}>{label}</h2>
         {label !== prettyDate(date) ? <span className="text-[12px] text-faint">{prettyDate(date, { day: "numeric", month: "short" })}</span> : null}
         <span className="ml-auto text-[11.5px] text-faint">{tasks.length || ""}</span>
-        <button
-          onClick={() => setAdding(true)}
-          className="rounded-md p-0.5 text-faint opacity-100 hover:bg-panel-hover hover:text-fg sm:opacity-0 sm:group-hover/day:opacity-100"
-          aria-label={`Add task on ${label}`}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        <Tip content={`Add a task on ${label}`}>
+          <button
+            onClick={() => setAdding(true)}
+            className="rounded-md p-0.5 text-faint opacity-100 hover:bg-panel-hover hover:text-fg focus:opacity-100 sm:opacity-0 sm:group-hover/day:opacity-100"
+            aria-label={`Add task on ${label}`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </Tip>
       </div>
       {tasks.map((t) => (
         <TaskItem key={t.id} task={t} showDate={false} />

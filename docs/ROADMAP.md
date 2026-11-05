@@ -1,6 +1,6 @@
 # Productivize — Roadmap: Scout v2 (job search, applications, career memory)
 
-Status: **Phase 1 built** (worker + queue, JobSpy / curated career sites / Gmail label sources, live-streaming feed, Search & ask Scout). Phases 2–6 start after a go-ahead.
+Status: **Phase 1 built** (worker + queue, JobSpy / curated career sites / Gmail label sources, live-streaming feed, Search & ask Scout). **Phase 2 built** (Interests + career memory, shared dashboards with email invites, Share to…, icon labels). Phases 3–6 start after a go-ahead.
 Platforms: **Android + Windows first** (iPhone pieces that already exist stay as they are).
 
 ---
@@ -16,6 +16,11 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 5 | Scout check-in questions | **Max 2/day, in-app only** (Today card + notification inbox); pending questions are mentioned in the morning brief, never as separate pushes |
 | 6 | LinkedIn / Naukri | **Never automated while logged in.** Jobs come from public listings (JobSpy, low volume) and alert emails; applying there stays manual (copy-paste Apply sheet) |
 | 7 | Submitting | **The user always presses Submit.** No auto-submit anywhere |
+| 8 | Interests | **Everything**: career skills, learning topics and hobbies. Each gets a **strength** and a **job relevance (0–100)**; Scout searches for it at ≥70, counts it as a small bonus at 40–69 when a job mentions it, ignores it below 40. Overrides: *Use for jobs* / *Never use for jobs* |
+| 9 | Sharing | **Copies.** Sharing never exposes the original; the shared dashboard holds its own copy that members can work on (tick, change status, comment) |
+| 10 | Shared dashboards | **Invite anyone by email.** The app becomes invite-only: invitees get their own full private dashboard plus access to the shared dashboards they accept. Weekly progress is only visible between people who share a dashboard |
+| 11 | Timing | Interests, sharing and icon labels ship **together with phase 2** (career memory) |
+| 12 | UI | Every icon-only button gets a visible label on hover/focus, a long-press label on phones, and an accessible name |
 
 ---
 
@@ -161,6 +166,15 @@ Statuses also update automatically from email in the Gmail label: confirmations,
 
 ---
 
+## 6b. Shared dashboards ("Together")
+
+- **Invite by email** from Together → New shared dashboard. New people get an email with a sign-up link (invite-only: no open sign-ups); existing users get an in-app + push invite. Accept / Decline.
+- **Share to…** on tasks, jobs, learning entries, links, flashcards, interests and quick notes (and the Android share menu). Picks one or more dashboards, adds a note. Always a copy.
+- **Inside a dashboard:** feed of shared items (tick tasks, move jobs along, comment, react), **shared lists** everyone edits, members, weekly progress strip. **Take a copy** saves an item into your own dashboard.
+- Owners rename/delete and remove members; members leave. Realtime updates for everyone in the dashboard.
+
+---
+
 ## 7. LLM lanes
 
 | Lane | Examples | Order | Runs on |
@@ -202,7 +216,7 @@ All background AI work goes through **one Supabase queue** (`agent_jobs`): type,
 ## 10. Phases
 
 1. ✅ **Worker + queue + sources**: JobSpy, career sites, Gmail label; live-streaming feed; Search & ask Scout page.
-2. **Career memory**: facts, check-in questions, "What Scout knows" page; feeds into search plans.
+2. ✅ **Career memory + Interests + sharing**: Interests page (what Scout knows), check-in questions, job relevance feeding search and scoring; shared dashboards with email invites, Share to… everywhere, shared lists; icon labels.
 3. **Applications**: answer bank, save → prepare, Apply sheet, full applied-jobs record, email status updates.
 4. **Stretch prompts** + paste-back resume versions.
 5. **Edge/Chrome extension** (Greenhouse, Lever, Ashby → Workday).

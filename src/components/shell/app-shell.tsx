@@ -11,7 +11,8 @@ import { FocusProvider } from "@/components/focus/focus-store";
 import { CarryReview } from "@/components/tasks/carry-review";
 import { QuickAddDialog } from "@/components/tasks/quick-add-dialog";
 import { TaskEditor } from "@/components/tasks/task-editor";
-import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
+import { ShareDialogHost } from "@/components/together/share-dialog";
+import { Menu, MenuItem, MenuLabel, MenuSeparator, Tip } from "@/components/ui/menu";
 import { useHotkey, useMounted, useToday } from "@/lib/hooks";
 import { sb } from "@/lib/queries/client";
 import { useProfile, useUpdateProfile, useUser } from "@/lib/queries/profile";
@@ -53,7 +54,17 @@ function useBadges() {
       return (count ?? 0) > 0;
     },
   });
-  return { today: todayCount, jobs: jobCount, learning: !learnedToday };
+  const { data: user } = useUser();
+  const { data: invites = 0 } = useQuery({
+    queryKey: ["badge-invites", user?.email],
+    enabled: !!user?.email,
+    refetchInterval: 5 * 60_000,
+    queryFn: async () => {
+      const { count } = await sb().from("space_invites").select("id", { count: "exact", head: true }).eq("status", "pending").eq("email", user!.email!.toLowerCase());
+      return count ?? 0;
+    },
+  });
+  return { today: todayCount, jobs: jobCount, learning: !learnedToday, together: invites > 0 };
 }
 
 function NavLink({ item, badge, dot, onClick }: { item: NavItem; badge?: number; dot?: boolean; onClick?: () => void }) {
@@ -138,14 +149,15 @@ function Sidebar() {
           <span className="flex-1 text-left">Search</span>
           <kbd className="kbd">⌘K</kbd>
         </button>
-        <button
-          onClick={() => openQuickAdd()}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-panel text-muted transition-colors hover:border-line-strong hover:text-fg"
-          title="New task (C)"
-          aria-label="New task"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        <Tip content="New task · C">
+          <button
+            onClick={() => openQuickAdd()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-panel text-muted transition-colors hover:border-line-strong hover:text-fg"
+            aria-label="New task"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </Tip>
       </div>
       <nav className="flex-1 space-y-5 overflow-y-auto">
         {groups.map((g) => (
@@ -157,7 +169,7 @@ function Sidebar() {
                   key={n.href}
                   item={n}
                   badge={n.key === "today" ? badges.today : n.key === "jobs" ? badges.jobs : undefined}
-                  dot={n.key === "learning" ? badges.learning : undefined}
+                  dot={n.key === "learning" ? badges.learning : n.key === "together" ? badges.together : undefined}
                 />
               ))}
             </div>
@@ -196,13 +208,15 @@ function MobileBar() {
 
       {/* floating add button */}
       {["/", "/upcoming", "/calendar"].some((p) => isActive(pathname, p)) ? (
-        <button
+        <Tip content="New task">
+<button
           onClick={() => openQuickAdd()}
           aria-label="New task"
           className="fixed bottom-[calc(env(safe-area-inset-bottom)+72px)] right-4 z-30 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-white shadow-[0_8px_24px_rgba(94,106,210,0.45)] active:scale-95 md:hidden"
         >
           <Plus className="h-5 w-5" />
         </button>
+</Tip>
       ) : null}
 
       {/* bottom tab bar */}
@@ -339,6 +353,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette />
       <QuickAddDialog />
+      <ShareDialogHost />
       <TaskEditor />
       <CarryReview />
       <TimezoneSync />

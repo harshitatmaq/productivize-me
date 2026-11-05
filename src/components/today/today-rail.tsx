@@ -1,5 +1,7 @@
 "use client";
 
+import { CheckIns } from "@/components/interests/check-ins";
+import { Tip } from "@/components/ui/menu";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, BellRing, Briefcase, Flame, GraduationCap, Timer } from "lucide-react";
 import { useFocusSessions } from "@/lib/queries/focus";
@@ -26,9 +28,11 @@ function Widget({ title, icon, href, children }: { title: string; icon: React.Re
           {title}
         </h3>
         {href ? (
-          <Link href={href} className="text-faint hover:text-fg" aria-label={`Open ${title}`}>
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          <Tip content={`Open ${title}`}>
+            <Link href={href} className="text-faint hover:text-fg" aria-label={`Open ${title}`}>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </Tip>
         ) : null}
       </div>
       {children}
@@ -103,6 +107,7 @@ export function TodayRail() {
 
   return (
     <aside className="space-y-4 xl:sticky xl:top-10 xl:self-start">
+      <CheckIns />
       <Widget title="This week" icon={<Flame className="h-3.5 w-3.5 text-p2" />}>
         <div className="flex items-end justify-between gap-1.5">
           {week.map((w, i) => (

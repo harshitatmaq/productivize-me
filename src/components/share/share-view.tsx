@@ -1,11 +1,12 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Briefcase, CheckSquare, GraduationCap, Share2 } from "lucide-react";
+import { Briefcase, CheckSquare, GraduationCap, HeartHandshake, Share2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { openShare, shareLink, shareNote } from "@/lib/share";
 import { Card, PageHeader } from "@/components/ui/misc";
 import { useToday } from "@/lib/hooks";
 import { useCreateTask } from "@/lib/queries/tasks";
@@ -76,6 +77,15 @@ export function ShareView() {
     { id: "job", icon: Briefcase, title: "Save job to tracker", desc: "Scout reads the posting, fills in the details and scores it for you.", onClick: saveJob, disabled: !url, primary: looksLikeJob },
     { id: "task", icon: CheckSquare, title: "Add as a task for today", desc: "Keeps the link in the task notes.", onClick: saveTask, primary: !looksLikeJob && !!url },
     { id: "learning", icon: GraduationCap, title: "Log as learning", desc: "Opens today's learning entry with this as a resource.", onClick: saveLearning, primary: false },
+    {
+      id: "together",
+      icon: HeartHandshake,
+      title: "Send to a shared dashboard",
+      desc: "Share a copy with people you've invited (pick who on the next step).",
+      onClick: () => openShare(url ? shareLink(url, label !== url ? label : undefined) : shareNote(label || text)),
+      disabled: !url && !(label || text),
+      primary: false,
+    },
   ];
 
   return (

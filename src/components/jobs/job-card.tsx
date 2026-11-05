@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, ExternalLink, MapPin, Wallet, Clock, Wifi } from "lucide-react";
+import { Check, ExternalLink, Lightbulb, MapPin, Share2, Wallet, Clock, Wifi } from "lucide-react";
 import { JobFeedback } from "./job-feedback";
 import { Tip } from "@/components/ui/menu";
 import type { Job } from "@/lib/types";
+import { openShare, shareJob } from "@/lib/share";
 import { cn, timeAgo } from "@/lib/utils";
 import { CompanyLogo, ScoreBadge, sourceLabel } from "./job-bits";
 
@@ -69,10 +70,25 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
             </ul>
           ) : null}
 
+          {job.interest_matches?.length ? (
+            <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-muted">
+              <Lightbulb className="h-3 w-3 shrink-0 text-accent" />
+              <span className="truncate">Uses your interests: {job.interest_matches.map((m) => m.name).join(", ")}</span>
+            </div>
+          ) : null}
           <div className="mt-3 flex items-center justify-between gap-2">
             <span className="truncate text-[11px] text-faint">{sourceLabel(job.source)}</span>
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
               <JobFeedback job={job} />
+              <Tip content="Share to…">
+                <button
+                  onClick={() => openShare(shareJob(job))}
+                  aria-label="Share to…"
+                  className="rounded-md p-1.5 text-faint transition-colors hover:bg-panel-hover hover:text-fg"
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                </button>
+              </Tip>
               <a
                 href={job.apply_url ?? job.url}
                 target="_blank"

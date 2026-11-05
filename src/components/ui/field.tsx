@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
@@ -45,18 +45,25 @@ export function Switch({
   disabled,
   label,
   description,
+  ariaLabel,
 }: {
   checked: boolean;
+  /** Spoken name when the switch has no visible label next to it. */
+  ariaLabel?: string;
   onChange: (v: boolean) => void;
   disabled?: boolean;
   label?: ReactNode;
   description?: ReactNode;
 }) {
+  const id = useId();
   const control = (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-labelledby={label ? `${id}-label` : undefined}
+      aria-label={!label ? ariaLabel : undefined}
+      aria-describedby={description ? `${id}-desc` : undefined}
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
@@ -76,8 +83,14 @@ export function Switch({
   return (
     <div className="flex items-start justify-between gap-4 py-2.5">
       <div className="min-w-0">
-        <div className="text-[13.5px] text-fg">{label}</div>
-        {description ? <div className="mt-0.5 text-xs text-muted">{description}</div> : null}
+        <div id={`${id}-label`} className="text-[13.5px] text-fg">
+          {label}
+        </div>
+        {description ? (
+          <div id={`${id}-desc`} className="mt-0.5 text-xs text-muted">
+            {description}
+          </div>
+        ) : null}
       </div>
       <div className="pt-0.5">{control}</div>
     </div>

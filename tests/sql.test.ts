@@ -18,13 +18,15 @@ beforeAll(async () => {
     create schema auth;
     create table auth.users (id uuid primary key default gen_random_uuid(), email text, raw_user_meta_data jsonb default '{}');
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    grant usage on schema auth to authenticated, service_role;
+    grant usage on schema public to authenticated, service_role;
   `);
   try {
     await db.exec("create publication supabase_realtime");
   } catch {
     // publications unsupported here — the migration skips that block
   }
-  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql"]) {
+  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql"]) {
     const sql = readFileSync(`supabase/migrations/${f}`, "utf8");
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -105,6 +107,10 @@ describe("focus + buddy", () => {
     await db.exec(`update public.profiles set share_progress = true where id = '${u1}'`);
     expect((await db.query(`select * from public.buddy_stats('${week}')`)).rows).toHaveLength(1);
     await db.exec(`update public.profiles set share_progress = true where id = '${u2}'`);
+    // Opting in isn't enough any more: you only see people you share a dashboard with.
+    expect((await db.query(`select * from public.buddy_stats('${week}')`)).rows).toHaveLength(1);
+    const sp = await one<{ id: string }>(`insert into public.spaces (name, owner_id) values ('Us', '${u1}') returning id`);
+    await db.exec(`insert into public.space_members (space_id, user_id) values ('${sp.id}', '${u2}')`);
     const rows = (await db.query<{ is_me: boolean; learning_streak: number; name: string }>(`select * from public.buddy_stats('${week}')`)).rows;
     expect(rows).toHaveLength(2);
     expect(rows[0].is_me).toBe(true);
@@ -160,5 +166,80 @@ describe("scout worker plumbing", () => {
     expect(r.rows[0].similarity).toBeCloseTo(1);
     await asUser(u2);
     expect((await db.query(`select * from public.match_jobs('${vec(0)}', 'm', 10)`)).rows).toHaveLength(0);
+  });
+});
+
+describe("shared dashboards", () => {
+  // Runs queries the way the app does: as the "authenticated" role, with RLS on.
+  const asApp = async (id: string) => {
+    await db.exec(`reset role`);
+    await asUser(id);
+    await db.exec(`set role authenticated`);
+  };
+  const rows = async (sql: string) => (await db.query(sql)).rows;
+
+  it("invites by email, accepts, shares copies and keeps strangers out", async () => {
+    await db.exec(`reset role`);
+    const u3 = (await one<{ id: string }>(`insert into auth.users (email) values ('c@x.com') returning id`)).id;
+    const u4 = (await one<{ id: string }>(`insert into auth.users (email) values ('d@x.com') returning id`)).id;
+
+    await asApp(u3);
+    const sp = await one<{ id: string }>(`insert into public.spaces (name) values ('Job hunt') returning id`);
+    expect(await rows(`select role from public.space_members where space_id = '${sp.id}'`)).toEqual([{ role: "owner" }]);
+
+    // Not invited yet → invisible.
+    await asApp(u4);
+    expect(await rows(`select id from public.spaces where id = '${sp.id}'`)).toHaveLength(0);
+
+    await asApp(u3);
+    const inv = await one<{ id: string }>(`insert into public.space_invites (space_id, email) values ('${sp.id}', 'd@x.com') returning id`);
+
+    // The invitee sees the space name and the invite, but nothing inside yet.
+    await asApp(u4);
+    expect(await rows(`select name from public.spaces where id = '${sp.id}'`)).toEqual([{ name: "Job hunt" }]);
+    expect(await rows(`select id from public.space_items where space_id = '${sp.id}'`)).toHaveLength(0);
+    await db.exec(`select public.accept_space_invite('${inv.id}')`);
+    expect((await rows(`select * from public.space_people('${sp.id}')`)).length).toBe(2);
+
+    // Someone else can't accept an invite that isn't theirs.
+    await asApp(u2);
+    await expect(db.exec(`select public.accept_space_invite('${inv.id}')`)).rejects.toThrow();
+
+    await asApp(u3);
+    const item = await one<{ id: string }>(
+      `insert into public.space_items (space_id, kind, title, payload) values ('${sp.id}', 'task', 'Mock interview', '{"due_date":"2030-01-01"}') returning id`,
+    );
+    await asApp(u4);
+    await db.exec(`update public.space_items set done = true where id = '${item.id}'`);
+    expect(await one<{ done_by: string }>(`select done_by from public.space_items where id = '${item.id}'`)).toEqual({ done_by: u4 });
+    await db.exec(`insert into public.space_comments (item_id, body) values ('${item.id}', 'Nice')`);
+    // Members can't delete what others shared (only the author or the owner).
+    await db.exec(`delete from public.space_items where id = '${item.id}'`);
+    expect(await rows(`select id from public.space_items where id = '${item.id}'`)).toHaveLength(1);
+
+    // A stranger can't read it, or attach comments to it via their own space.
+    await asApp(u2);
+    expect(await rows(`select id from public.space_items where id = '${item.id}'`)).toHaveLength(0);
+    const own = await one<{ id: string }>(`insert into public.spaces (name) values ('Mine') returning id`);
+    await expect(
+      db.exec(`insert into public.space_comments (item_id, space_id, body) values ('${item.id}', '${own.id}', 'sneaky')`),
+    ).rejects.toThrow();
+
+    // Members can leave; the owner can't leave their own dashboard (they delete it instead).
+    await asApp(u4);
+    await db.exec(`delete from public.space_members where space_id = '${sp.id}' and user_id = '${u4}'`);
+    expect(await rows(`select id from public.space_items where space_id = '${sp.id}'`)).toHaveLength(0);
+    await asApp(u3);
+    await db.exec(`delete from public.space_members where space_id = '${sp.id}' and user_id = '${u3}'`);
+    expect(await rows(`select user_id from public.space_members where space_id = '${sp.id}'`)).toHaveLength(1);
+    await db.exec(`reset role`);
+  });
+
+  it("keeps interests unique per person", async () => {
+    await asUser(u1);
+    await db.exec(`insert into public.interests (name, kind) values ('Power BI', 'career')`);
+    await expect(db.exec(`insert into public.interests (name, kind) values ('power bi', 'learning')`)).rejects.toThrow();
+    await asUser(u2);
+    await db.exec(`insert into public.interests (name, kind) values ('Power BI', 'hobby')`);
   });
 });
