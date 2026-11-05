@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, Brain, ChevronDown, Clock, Flame, GraduationCap, Layers, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { BookOpenCheck, Brain, ChevronDown, Clock, Flame, GraduationCap, Layers, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -9,10 +9,11 @@ import { ChipsInput } from "@/components/ui/chips-input";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Markdown } from "@/components/ui/markdown";
-import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
+import { Menu, MenuItem, MenuLabel, MenuSeparator, Tip } from "@/components/ui/menu";
+import { openShare, shareLearning } from "@/lib/share";
 import { Badge, Card, EmptyState, PageHeader, ProgressRing, SectionTitle } from "@/components/ui/misc";
 import { useToday, useTrigger } from "@/lib/hooks";
-import { useGenerateCards } from "@/lib/queries/flashcards";
+import { useFlashcards, useGenerateCards } from "@/lib/queries/flashcards";
 import { AddCardDialog, FlashcardsPanel, ReviewDialog } from "./flashcards";
 import { LearningSuggestions } from "./suggestions";
 import { useDeleteLearning, useLearning, useSaveLearning } from "@/lib/queries/learning";
@@ -59,6 +60,7 @@ function Confidence({ value, onChange }: { value: number | null; onChange: (v: n
 
 function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
   const del = useDeleteLearning();
+  const { data: allCards = [] } = useFlashcards();
   const gen = useGenerateCards();
   const [addingCard, setAddingCard] = useState(false);
   const makeCards = () =>
@@ -93,8 +95,9 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
           </div>
         </div>
         <Menu
+          label="More actions — continue with AI, flashcards, share, edit"
           trigger={
-            <button className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="More">
+            <button className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="More actions">
               <MoreHorizontal className="h-4 w-4" />
             </button>
           }
@@ -118,6 +121,9 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
             Add a flashcard
           </MenuItem>
           <MenuSeparator />
+          <MenuItem icon={<Share2 className="h-3.5 w-3.5" />} onSelect={() => openShare(shareLearning(e, allCards.filter((c) => c.entry_id === e.id)))}>
+            Share to…
+          </MenuItem>
           <MenuItem icon={<Pencil className="h-3.5 w-3.5" />} onSelect={onEdit}>
             Edit
           </MenuItem>
@@ -569,9 +575,11 @@ export function LearningView() {
                   {draft.resources.map((r, i) => (
                     <span key={i} className="inline-flex max-w-[260px] items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[12px] text-muted">
                       <span className="truncate">{r.url}</span>
-                      <button onClick={() => setDraft({ ...draft, resources: draft.resources.filter((_, j) => j !== i) })} aria-label="Remove">
-                        <X className="h-3 w-3" />
-                      </button>
+                      <Tip content="Remove link">
+                        <button onClick={() => setDraft({ ...draft, resources: draft.resources.filter((_, j) => j !== i) })} aria-label={`Remove ${r.url}`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Tip>
                     </span>
                   ))}
                 </div>

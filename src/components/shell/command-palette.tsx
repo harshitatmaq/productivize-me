@@ -1,12 +1,13 @@
 "use client";
 
 import { Command } from "cmdk";
-import { Moon, Plus, Search, Sun } from "lucide-react";
+import { HeartHandshake, Lightbulb, Moon, Plus, Search, Share2, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { useHotkey } from "@/lib/hooks";
 import { useTasks } from "@/lib/queries/tasks";
+import { openShare, shareNote } from "@/lib/share";
 import { NAV } from "./nav";
 import { useUi } from "./ui-store";
 
@@ -73,6 +74,28 @@ export function CommandPalette() {
           </Command.Item>
           <Command.Item value="log learning today" className={item} onSelect={() => go(() => router.push("/learning?new=1"))}>
             <Plus className="h-4 w-4 text-muted" /> Log today&apos;s learning
+          </Command.Item>
+          <Command.Item
+            value={`share send note dashboard together ${q}`}
+            className={item}
+            onSelect={() => {
+              const text = q.trim();
+              go(() => (text ? openShare(shareNote(text)) : router.push("/together")));
+            }}
+          >
+            <Share2 className="h-4 w-4 text-muted" />
+            <span className="truncate">{q.trim() ? `Share “${q.trim()}” to a shared dashboard` : "Share a note to a shared dashboard…"}</span>
+          </Command.Item>
+          <Command.Item
+            value={`interest add hobby skill ${q}`}
+            className={item}
+            onSelect={() => go(() => router.push(q.trim() ? `/interests?add=${encodeURIComponent(q.trim())}` : "/interests?add="))}
+          >
+            <Lightbulb className="h-4 w-4 text-muted" />
+            <span className="truncate">{q.trim() ? `Add “${q.trim()}” to interests` : "Add an interest"}</span>
+          </Command.Item>
+          <Command.Item value="new shared dashboard invite together" className={item} onSelect={() => go(() => router.push("/together?new=1"))}>
+            <HeartHandshake className="h-4 w-4 text-muted" /> New shared dashboard &amp; invite
           </Command.Item>
           <Command.Item value="new reminder" className={item} onSelect={() => go(() => router.push("/reminders?new=1"))}>
             <Plus className="h-4 w-4 text-muted" /> New reminder

@@ -1,14 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/p/", "/api/", "/offline"];
+const PUBLIC_PREFIXES = ["/login", "/p/", "/api/", "/offline", "/auth/"];
 
-function allowed(email: string | undefined | null) {
+/** ALLOWED_EMAILS, or anyone invited to a shared dashboard (app_metadata.access = "invited"). */
+function allowed(user: { email?: string | null; app_metadata?: Record<string, unknown> }) {
+  if (user.app_metadata?.access === "invited") return true;
   const list = (process.env.ALLOWED_EMAILS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  return list.length === 0 || (!!email && list.includes(email.toLowerCase()));
+  return list.length === 0 || (!!user.email && list.includes(user.email.toLowerCase()));
 }
 
 /**
@@ -49,7 +51,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user && !allowed(user.email)) {
+  if (user && !allowed(user)) {
     await supabase.auth.signOut();
     const redirect = NextResponse.redirect(new URL("/login?error=not_allowed", request.url));
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));

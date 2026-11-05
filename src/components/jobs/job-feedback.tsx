@@ -44,6 +44,7 @@ export function JobFeedback({ job, size = "sm" }: { job: Job; size?: "sm" | "md"
         </button>
       </Tip>
       <Menu
+        label={job.feedback === -1 ? "Marked not interested" : "Not interested — tell Scout why"}
         trigger={
           <button
             className={cn("rounded-md p-1.5 hover:bg-panel-hover", job.feedback === -1 ? "text-danger" : "text-faint hover:text-fg")}

@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { isEmailAllowed } from "@/lib/env";
+import { isUserAllowed } from "@/lib/env";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export class HttpError extends Error {
@@ -20,7 +20,7 @@ export async function requireUser(): Promise<{ user: User; supabase: SupabaseCli
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new HttpError(401, "Not signed in");
-  if (!isEmailAllowed(user.email)) throw new HttpError(403, "This account is not allowed to use the app");
+  if (!isUserAllowed(user)) throw new HttpError(403, "This account is not allowed to use the app");
   return { user, supabase };
 }
 

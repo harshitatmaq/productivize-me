@@ -33,6 +33,15 @@ export function isEmailAllowed(email: string | null | undefined): boolean {
   return !!email && list.includes(email.toLowerCase());
 }
 
+/**
+ * Invite-only access: the people in ALLOWED_EMAILS, plus anyone invited to a
+ * shared dashboard (their account carries app_metadata.access = "invited").
+ */
+export function isUserAllowed(user: { email?: string | null; app_metadata?: Record<string, unknown> } | null | undefined): boolean {
+  if (!user) return false;
+  return user.app_metadata?.access === "invited" || isEmailAllowed(user.email);
+}
+
 export function appUrl(): string {
   return (
     env("NEXT_PUBLIC_APP_URL") ??

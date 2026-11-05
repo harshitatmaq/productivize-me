@@ -17,6 +17,7 @@ export function renderEmail(params: {
   subtitle?: string;
   sections: EmailSection[];
   cta?: { label: string; href: string };
+  footer?: string;
 }): string {
   const base = appUrl();
   const href = (h?: string) => (h ? (h.startsWith("http") ? h : `${base}${h}`) : undefined);
@@ -56,6 +57,6 @@ export function renderEmail(params: {
       ${sections}
       ${cta}
     </table>
-    <div style="font-size:12px;color:#5a5f68;margin-top:16px;">You get this because email digests are on in Settings → Notifications.</div>
+    <div style="font-size:12px;color:#5a5f68;margin-top:16px;">${esc(params.footer ?? "You get this because email digests are on in Settings → Notifications.")}</div>
   </td></tr></table></body></html>`;
 }

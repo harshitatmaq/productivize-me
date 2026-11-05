@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "./menu";
 import { X } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
@@ -43,9 +44,11 @@ export function ChipsInput({
         <span key={v} className="inline-flex h-6 items-center gap-1 rounded-md border border-line bg-panel px-1.5 text-[12px] text-fg-2">
           {prefix}
           {v}
-          <button type="button" className="text-faint hover:text-fg" onClick={() => onChange(value.filter((x) => x !== v))} aria-label={`Remove ${v}`}>
-            <X className="h-3 w-3" />
-          </button>
+          <Tip content={`Remove ${v}`}>
+            <button type="button" className="text-faint hover:text-fg" onClick={() => onChange(value.filter((x) => x !== v))} aria-label={`Remove ${v}`}>
+              <X className="h-3 w-3" />
+            </button>
+          </Tip>
         </span>
       ))}
       <input

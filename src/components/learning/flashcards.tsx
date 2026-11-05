@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { Brain, Layers, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Grade } from "ts-fsrs";
@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, Textarea } from "@/components/ui/field";
 import { Markdown } from "@/components/ui/markdown";
+import { Menu, MenuItem, MenuLabel, Tip } from "@/components/ui/menu";
 import { Card, SectionTitle } from "@/components/ui/misc";
+import { openShare, shareFlashcards } from "@/lib/share";
 import { GRADES, previewIntervals } from "@/lib/fsrs";
 import { useNow, useResettableState } from "@/lib/hooks";
 import { useAddCard, useDeleteCard, useFlashcards, useReviewCard, useUpdateCard } from "@/lib/queries/flashcards";
@@ -198,9 +200,31 @@ export function FlashcardsPanel({ onReview }: { onReview: () => void }) {
             <Layers className="h-3.5 w-3.5" /> Flashcards
           </span>
         </SectionTitle>
-        <button onClick={() => setAdding(true)} className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="Add card">
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          {cards.length ? (
+            <Menu
+              label="Share flashcards"
+              trigger={
+                <button className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="Share flashcards">
+                  <Share2 className="h-3.5 w-3.5" />
+                </button>
+              }
+            >
+              <MenuLabel>Share a copy of…</MenuLabel>
+              {[...new Set(cards.flatMap((c) => c.tags))].filter((t) => !t.startsWith("from-")).slice(0, 12).map((t) => (
+                <MenuItem key={t} onSelect={() => openShare(shareFlashcards(`#${t} flashcards`, cards.filter((c) => c.tags.includes(t))))}>
+                  #{t} · {cards.filter((c) => c.tags.includes(t)).length}
+                </MenuItem>
+              ))}
+              <MenuItem onSelect={() => openShare(shareFlashcards("My flashcards", cards.slice(0, 200)))}>All cards · {Math.min(cards.length, 200)}</MenuItem>
+            </Menu>
+          ) : null}
+          <Tip content="Add a card">
+            <button onClick={() => setAdding(true)} className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg" aria-label="Add card">
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
+        </div>
       </div>
       {cards.length ? (
         <>

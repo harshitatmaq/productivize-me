@@ -6,13 +6,13 @@ import { Menu, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { useToday } from "@/lib/hooks";
 import { prettyDate, quickDates } from "./task-utils";
 
-export function RescheduleMenu({ trigger, onPick }: { trigger: ReactNode; onPick: (date: string | null) => void }) {
+export function RescheduleMenu({ trigger, onPick, label }: { trigger: ReactNode; onPick: (date: string | null) => void; label?: ReactNode }) {
   const today = useToday();
   const q = quickDates(today);
   const input = useRef<HTMLInputElement>(null);
   return (
     <>
-      <Menu trigger={trigger}>
+      <Menu trigger={trigger} label={label}>
         <MenuLabel>Move to</MenuLabel>
         <MenuItem icon={<Sun className="h-3.5 w-3.5" />} onSelect={() => onPick(q.today)} shortcut={prettyDate(q.today, { weekday: "short" })}>
           Today

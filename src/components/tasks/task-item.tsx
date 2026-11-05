@@ -1,10 +1,11 @@
 "use client";
 
-import { AlarmClock, AlignLeft, Briefcase, CalendarArrowUp, Copy, MoreHorizontal, Redo2, Repeat, Timer, Trash2 } from "lucide-react";
+import { AlarmClock, AlignLeft, Briefcase, CalendarArrowUp, Copy, MoreHorizontal, Redo2, Repeat, Share2, Timer, Trash2 } from "lucide-react";
 import { useFocus } from "@/components/focus/focus-store";
 import { toast } from "sonner";
 import { useUi } from "@/components/shell/ui-store";
 import { Menu, MenuItem, MenuSeparator, Tip } from "@/components/ui/menu";
+import { openShare, shareTask } from "@/lib/share";
 import { useToday } from "@/lib/hooks";
 import { useCreateTask, useDeleteTask, useUpdateTask } from "@/lib/queries/tasks";
 import type { Task } from "@/lib/types";
@@ -110,16 +111,19 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
         {!done ? (
           <RescheduleMenu
             onPick={reschedule}
+            label="Reschedule — today, tomorrow, next week or a date"
             trigger={
-              <button className="rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg" aria-label="Reschedule">
+              <button className="inline-flex items-center gap-1 rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg" aria-label="Reschedule">
                 <CalendarArrowUp className="h-3.5 w-3.5" />
+                <span className="hidden pr-0.5 text-[11.5px] xl:inline">Reschedule</span>
               </button>
             }
           />
         ) : null}
         <Menu
+          label="More actions — priority, focus, share, duplicate, delete"
           trigger={
-            <button className="hidden rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg sm:block" aria-label="More">
+            <button className="rounded-md p-1 text-faint hover:bg-panel-2 hover:text-fg" aria-label="More actions">
               <MoreHorizontal className="h-3.5 w-3.5" />
             </button>
           }
@@ -149,6 +153,9 @@ export function TaskItem({ task, showDate = true, compact = false }: { task: Tas
               <MenuSeparator />
             </>
           ) : null}
+          <MenuItem icon={<Share2 className="h-3.5 w-3.5" />} onSelect={() => openShare(shareTask(task))}>
+            Share to…
+          </MenuItem>
           <MenuItem
             icon={<Copy className="h-3.5 w-3.5" />}
             onSelect={() =>

@@ -19,6 +19,7 @@ export function NotificationBell({ className }: { className?: string }) {
       onOpenChange={setOpen}
       align="end"
       className="w-[min(92vw,360px)] p-0"
+      label={unread.length ? `Notifications · ${unread.length} unread` : "Notifications"}
       trigger={
         <button
           className={cn("relative rounded-md p-1.5 text-muted transition-colors hover:bg-panel-hover hover:text-fg", className)}

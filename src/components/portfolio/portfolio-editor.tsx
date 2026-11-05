@@ -1,5 +1,6 @@
 "use client";
 
+import { Tip } from "@/components/ui/menu";
 import { ArrowDown, ArrowUp, Check, Copy, Eye, Globe, PencilLine, Plus, Save, Sparkles, Star, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,18 +33,24 @@ function ItemShell({ children, onUp, onDown, onRemove }: { children: React.React
     <div className="relative rounded-lg border border-line bg-panel-2/50 p-3">
       <div className="absolute right-2 top-2 flex gap-0.5">
         {onUp ? (
-          <button onClick={onUp} className="rounded p-1 text-faint hover:text-fg" aria-label="Move up">
-            <ArrowUp className="h-3.5 w-3.5" />
-          </button>
+          <Tip content="Move up">
+            <button onClick={onUp} className="rounded p-1 text-faint hover:text-fg" aria-label="Move up">
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
         ) : null}
         {onDown ? (
-          <button onClick={onDown} className="rounded p-1 text-faint hover:text-fg" aria-label="Move down">
-            <ArrowDown className="h-3.5 w-3.5" />
-          </button>
+          <Tip content="Move down">
+            <button onClick={onDown} className="rounded p-1 text-faint hover:text-fg" aria-label="Move down">
+              <ArrowDown className="h-3.5 w-3.5" />
+            </button>
+          </Tip>
         ) : null}
-        <button onClick={onRemove} className="rounded p-1 text-faint hover:text-danger" aria-label="Remove">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <Tip content="Remove this item">
+          <button onClick={onRemove} className="rounded p-1 text-faint hover:text-danger" aria-label="Remove this item">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </Tip>
       </div>
       <div className="space-y-2.5 pr-16">{children}</div>
     </div>
@@ -165,7 +172,7 @@ export function PortfolioEditor() {
           </>
         ) : null}
         <label className="flex items-center gap-2 text-[13px] text-fg-2">
-          <Switch checked={!!row?.is_public} onChange={(v) => persist({ is_public: v })} />
+          <Switch checked={!!row?.is_public} onChange={(v) => persist({ is_public: v })} ariaLabel="Public portfolio" />
           {row?.is_public ? "Public" : "Private"}
         </label>
       </Card>
@@ -202,7 +209,7 @@ export function PortfolioEditor() {
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-2 text-[13px] text-fg-2">
-                  <Switch checked={!!d.open_to_work} onChange={(v) => update({ open_to_work: v })} /> Open to work badge
+                  <Switch checked={!!d.open_to_work} onChange={(v) => update({ open_to_work: v })} ariaLabel="Open to work badge" /> Open to work badge
                 </label>
                 {d.open_to_work ? (
                   <Input className="max-w-[260px]" value={d.availability ?? ""} onChange={(e) => update({ availability: e.target.value })} placeholder="Open to senior roles · Bengaluru / remote" />
