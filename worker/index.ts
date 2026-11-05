@@ -63,12 +63,26 @@ async function heartbeat() {
 
 async function usersToSearch(): Promise<Profile[]> {
   const admin = supabaseAdmin();
-  const [{ data: profiles }, { data: ready }] = await Promise.all([
-    admin.from("profiles").select("*").eq("job_search_enabled", true),
-    admin.from("job_profiles").select("user_id").eq("status", "ready"),
+  const [{ data: profiles, error: e1 }, { data: ready, error: e2 }] = await Promise.all([
+    admin.from("profiles").select("*"),
+    admin.from("job_profiles").select("user_id, status"),
   ]);
-  const ids = new Set((ready ?? []).map((r) => r.user_id as string));
-  return ((profiles ?? []) as Profile[]).filter((p) => ids.has(p.id));
+  if (e1 || e2) {
+    log("couldn't load users:", (e1 ?? e2)!.message);
+    return [];
+  }
+  const status = new Map((ready ?? []).map((r) => [r.user_id as string, r.status as string]));
+  const out: Profile[] = [];
+  for (const p of (profiles ?? []) as Profile[]) {
+    const s = status.get(p.id);
+    if (s !== "ready") {
+      if (ONCE) log(`${p.email}: skipped — Scout profile is ${s ?? "not started"} (finish Jobs → Set up Scout)`);
+    } else if (!p.job_search_enabled) {
+      if (ONCE) log(`${p.email}: skipped — hourly job search is off (Settings → Job search)`);
+    } else out.push(p);
+  }
+  if (!out.length && ONCE) log("no one to search for yet");
+  return out;
 }
 
 async function profileFor(userId: string): Promise<Profile | null> {
@@ -85,8 +99,13 @@ async function searchTick() {
     for (const p of await usersToSearch()) {
       if (stopping) break;
       try {
+        if (ONCE) log(`${p.email}: searching…${gmailAccounts().has((p.email ?? "").toLowerCase()) ? "" : " (no Gmail app password for this email in GMAIL_ACCOUNTS)"}`);
         const r = await runJobSearch(p.id, { trigger: "worker", profile: p, worker: NAME });
-        if (r.ran) {
+        if (!r.ran) {
+          if (!ONCE) continue;
+          const why = [...new Set(Object.values(r.sources).map((s) => s.skipped).filter(Boolean))].join(", ");
+          log(`${p.email}: nothing due${why ? ` (${why})` : ""}${r.log.length ? ` · ${r.log.join("; ")}` : ""}`);
+        } else {
           const errs = Object.entries(r.sources).filter(([, s]) => s.error).map(([k]) => k);
           log(`${p.email}: +${r.inserted} jobs (${r.strong} strong) from ${r.fetched} fetched in ${Math.round(r.ms / 1000)}s${errs.length ? ` · errors: ${errs.join(", ")}` : ""}`);
         }
