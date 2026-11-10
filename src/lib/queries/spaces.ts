@@ -180,6 +180,18 @@ export function useRemoveMember() {
   });
 }
 
+/** Picks your identity colour in a dashboard (the database refuses a taken one). */
+export function useSetMyColor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ spaceId, color }: { spaceId: string; color: string }) => {
+      const { data: me } = await sb().auth.getUser();
+      return unwrap(await sb().from("space_members").update({ color }).eq("space_id", spaceId).eq("user_id", me.user!.id));
+    },
+    onSettled: (_d, _e, v) => qc.invalidateQueries({ queryKey: k.people(v.spaceId) }),
+  });
+}
+
 export type InviteResponse = { status: "emailed" | "notified" | "link"; link?: string; newAccount: boolean; resend: boolean };
 
 export function useInvite() {

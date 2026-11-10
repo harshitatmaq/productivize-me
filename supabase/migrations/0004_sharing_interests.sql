@@ -277,6 +277,8 @@ as $$
 $$;
 
 -- Names of the people in a space (profiles stay private otherwise).
+-- (0006 adds a colour column; dropping first keeps re-runs in any order working.)
+drop function if exists public.space_people(uuid);
 create or replace function public.space_people(p_space uuid)
 returns table (user_id uuid, name text, email text, role text, joined_at timestamptz)
 language sql

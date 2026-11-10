@@ -260,7 +260,15 @@ export type BuddyStats = {
 // Shared dashboards ("spaces")
 // ---------------------------------------------------------------------------
 export type Space = { id: string; name: string; emoji: string; owner_id: string; created_at: string; updated_at: string };
-export type SpacePerson = { user_id: string; name: string; email: string | null; role: "owner" | "member"; joined_at: string };
+export type SpacePerson = {
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: "owner" | "member";
+  joined_at: string;
+  /** Identity colour in this dashboard (unique per dashboard). */
+  color: string | null;
+};
 export type SpaceInvite = {
   id: string;
   space_id: string;

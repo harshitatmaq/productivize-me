@@ -177,7 +177,7 @@ export function TogetherView() {
       <PageHeader
         title="Together"
         icon={<HeartHandshake className="h-5 w-5" />}
-        subtitle="Shared dashboards with people you invite. Share copies of tasks, jobs, notes and lists — your own dashboard stays private."
+        subtitle="Shared dashboards with people you invite: chat, plan on a shared board, and share copies of tasks, jobs and notes. Your own dashboard stays private."
         right={
           <Button variant="primary" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" /> New shared dashboard
@@ -199,8 +199,8 @@ export function TogetherView() {
             </Button>
           }
         >
-          Invite a friend, partner or study buddy by email. Then use <b>Share to…</b> on any task, job, learning note or flashcard to send them a copy, keep
-          shared lists together, and see each other&apos;s weekly progress.
+          Invite a friend, partner or study buddy by email. Then use <b>Share to…</b> on any task, job, learning note or flashcard to send them a copy, chat,
+          plan together on a shared board, and see each other&apos;s weekly progress.
         </EmptyState>
       ) : (
         <>
@@ -221,7 +221,14 @@ export function TogetherView() {
               </button>
             ))}
           </div>
-          {selected ? <SpaceView key={selected.id} space={selected} focusItem={params.get("item")} /> : null}
+          {selected ? (
+            <SpaceView
+              key={selected.id}
+              space={selected}
+              focusItem={params.get("item")}
+              initialTab={(["feed", "chat", "board", "people"] as const).find((t) => t === params.get("tab")) ?? null}
+            />
+          ) : null}
         </>
       )}
 

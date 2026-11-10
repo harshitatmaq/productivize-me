@@ -23,6 +23,8 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 13 | Planning | Your **planning preferences** (bedtime, work hours, routines like reading after 22:30, notes) are hard rules for Plan my day, enforced after the AI answers |
 | 14 | Health | **Push / Pull / Legs + Core** rotation, set logging with double progression, body weight with 7-day average and goal |
 | 12 | UI | Every icon-only button gets a visible label on hover/focus, a long-press label on phones, and an accessible name |
+| 15 | Chat (from two-chat) | Lives **inside each shared dashboard** as Chat + Board tabs, works for **any number of people**, keeps all two-chat features (offline outbox, photos, replies, reactions, mentions, pins, promises, saved/work messages, search, read receipts, typing, AI board assistant with approval). **Lists are replaced by the Board** (existing list items moved into Board → Tasks). No separate sign-in: Productivize's login covers it. A one-time script imports an existing two-chat history |
+| 16 | Identity colours | Each member picks a colour **per dashboard**; no two members can share one (database-enforced). It colours their messages, board items, shared-feed cards and avatars **only inside Together**; the rest of the app keeps its theme |
 
 ---
 
@@ -172,7 +174,7 @@ Statuses also update automatically from email in the Gmail label: confirmations,
 
 - **Invite by email** from Together → New shared dashboard. New people get an email with a sign-up link (invite-only: no open sign-ups); existing users get an in-app + push invite. Accept / Decline.
 - **Share to…** on tasks, jobs, learning entries, links, flashcards, interests and quick notes (and the Android share menu). Picks one or more dashboards, adds a note. Always a copy.
-- **Inside a dashboard:** feed of shared items (tick tasks, move jobs along, comment, react), **shared lists** everyone edits, members, weekly progress strip. **Take a copy** saves an item into your own dashboard.
+- **Inside a dashboard:** tabs for **Shared** (feed of shared items: tick tasks, move jobs along, comment, react), **Chat** (the two-chat app, for the whole group), **Board** (notes, tasks, discuss, shopping, meals, calendar; replaces shared lists) and **People & progress** (members, your colour, weekly progress). **Take a copy** saves an item into your own dashboard.
 - Owners rename/delete and remove members; members leave. Realtime updates for everyone in the dashboard.
 
 ---
