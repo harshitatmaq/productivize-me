@@ -69,7 +69,7 @@ If they give a start but no end, make the window 60 minutes. "After 10:30 PM" me
       notes: learned.note && !(current.notes ?? "").includes(learned.note) ? [current.notes, learned.note].filter(Boolean).join("\n") : current.notes,
     });
     const { error } = await supabase.from("profiles").update({ planning: next }).eq("id", user.id);
-    if (error) throw new HttpError(500, `${error.message} (did you run supabase/migrations/0005_planning_health.sql?)`);
+    if (error) throw new HttpError(500, `${error.message} (did you run supabase/migrations/0005_planning_health_chat_memory.sql?)`);
     return { ok: true, planning: next, summary: learned.summary ?? "Saved." };
   });
 }

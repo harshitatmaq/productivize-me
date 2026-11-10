@@ -26,7 +26,7 @@ beforeAll(async () => {
   } catch {
     // publications unsupported here — the migration skips that block
   }
-  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql", "0005_planning_health.sql", "0006_chat.sql"]) {
+  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql", "0005_planning_health_chat_memory.sql"]) {
     const sql = readFileSync(`supabase/migrations/${f}`, "utf8");
     await db.exec(sql);
     await db.exec(sql); // idempotent

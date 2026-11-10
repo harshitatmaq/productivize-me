@@ -4,7 +4,7 @@
 // workspace board. Additive and safe to re-run: rows keep their ids/client_ids and
 // are upserted with "ignore duplicates", so nothing is overwritten or deleted.
 //
-// Usage (from the productivize-me folder, with migration 0006 already run):
+// Usage (from the productivize-me folder, with migration 0005 already run):
 //
 //   set OLD_SUPABASE_URL=https://<old-project>.supabase.co
 //   set OLD_SUPABASE_SERVICE_ROLE_KEY=<old project's service_role key>
@@ -46,7 +46,7 @@ const pz = createClient(newUrl, newKey, { auth: { persistSession: false } });
 
 async function userId(email) {
   const { data, error } = await pz.rpc("auth_user_id_by_email", { p_email: email });
-  if (error) throw new Error(`${error.message} (run migrations 0004 and 0006 first)`);
+  if (error) throw new Error(`${error.message} (run migrations 0004 and 0005 first)`);
   if (!data) throw new Error(`No Productivize account for ${email}. Create or invite it first.`);
   return data;
 }

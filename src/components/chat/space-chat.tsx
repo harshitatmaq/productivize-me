@@ -78,7 +78,7 @@ export function SpaceChat({
           pins: (p.data ?? []) as Pin[],
           promises: (pr.data ?? []) as PromiseNote[],
           error: error
-            ? `${error}${/chat_|relation/.test(error) ? " — run supabase/migrations/0006_chat.sql" : ""}`
+            ? `${error}${/chat_|relation/.test(error) ? " — run supabase/migrations/0005_planning_health_chat_memory.sql" : ""}`
             : null,
         });
       } catch (e) {
