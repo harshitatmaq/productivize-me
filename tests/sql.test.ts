@@ -26,7 +26,7 @@ beforeAll(async () => {
   } catch {
     // publications unsupported here — the migration skips that block
   }
-  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql"]) {
+  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql", "0005_planning_health.sql"]) {
     const sql = readFileSync(`supabase/migrations/${f}`, "utf8");
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -241,5 +241,27 @@ describe("shared dashboards", () => {
     await expect(db.exec(`insert into public.interests (name, kind) values ('power bi', 'learning')`)).rejects.toThrow();
     await asUser(u2);
     await db.exec(`insert into public.interests (name, kind) values ('Power BI', 'hobby')`);
+  });
+});
+
+describe("health", () => {
+  it("keeps workouts per day, sets with their owner, and data private", async () => {
+    await asUser(u1);
+    const ex = await one<{ id: string }>(`insert into public.exercises (name, day_type, reps_min, reps_max) values ('Bench press', 'push', 6, 8) returning id`);
+    const w = await one<{ id: string }>(`insert into public.workouts (date, day_type) values ('2026-11-09', 'push') returning id`);
+    await db.exec(`insert into public.workout_sets (workout_id, exercise_id, exercise_name, set_no, reps, weight) values ('${w.id}', '${ex.id}', 'Bench press', 1, 8, 60)`);
+    // One entry per day.
+    await expect(db.exec(`insert into public.workouts (date, day_type) values ('2026-11-09', 'pull')`)).rejects.toThrow();
+    await expect(db.exec(`insert into public.exercises (name, day_type, reps_min, reps_max) values ('Bad', 'push', 10, 5)`)).rejects.toThrow();
+    // Someone else can't hang sets on your workout.
+    await asUser(u2);
+    await expect(
+      db.exec(`insert into public.workout_sets (workout_id, exercise_name, reps, weight) values ('${w.id}', 'Sneaky', 1, 1)`),
+    ).rejects.toThrow();
+    await db.exec(`insert into public.body_metrics (date, weight) values ('2026-11-09', 72.4)`);
+    await asUser(u1);
+    // Deleting the workout removes its sets.
+    await db.exec(`delete from public.workouts where id = '${w.id}'`);
+    expect((await one<{ n: number }>(`select count(*)::int as n from public.workout_sets where workout_id = '${w.id}'`)).n).toBe(0);
   });
 });

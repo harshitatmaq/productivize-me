@@ -20,6 +20,8 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 9 | Sharing | **Copies.** Sharing never exposes the original; the shared dashboard holds its own copy that members can work on (tick, change status, comment) |
 | 10 | Shared dashboards | **Invite anyone by email.** The app becomes invite-only: invitees get their own full private dashboard plus access to the shared dashboards they accept. Weekly progress is only visible between people who share a dashboard |
 | 11 | Timing | Interests, sharing and icon labels ship **together with phase 2** (career memory) |
+| 13 | Planning | Your **planning preferences** (bedtime, work hours, routines like reading after 22:30, notes) are hard rules for Plan my day, enforced after the AI answers |
+| 14 | Health | **Push / Pull / Legs + Core** rotation, set logging with double progression, body weight with 7-day average and goal |
 | 12 | UI | Every icon-only button gets a visible label on hover/focus, a long-press label on phones, and an accessible name |
 
 ---

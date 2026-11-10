@@ -1,7 +1,7 @@
 "use client";
 
 import { Command } from "cmdk";
-import { HeartHandshake, Lightbulb, Moon, Plus, Search, Share2, Sun } from "lucide-react";
+import { Dumbbell, HeartHandshake, Lightbulb, Moon, Plus, Scale, Search, Share2, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -96,6 +96,15 @@ export function CommandPalette() {
           </Command.Item>
           <Command.Item value="new shared dashboard invite together" className={item} onSelect={() => go(() => router.push("/together?new=1"))}>
             <HeartHandshake className="h-4 w-4 text-muted" /> New shared dashboard &amp; invite
+          </Command.Item>
+          <Command.Item value="log workout gym health push pull legs core" className={item} onSelect={() => go(() => router.push("/health"))}>
+            <Dumbbell className="h-4 w-4 text-muted" /> Log today&apos;s workout
+          </Command.Item>
+          <Command.Item value="log weight body scale health" className={item} onSelect={() => go(() => router.push("/health?tab=weight"))}>
+            <Scale className="h-4 w-4 text-muted" /> Log weight
+          </Command.Item>
+          <Command.Item value="planning preferences routine bedtime" className={item} onSelect={() => go(() => router.push("/settings#planning"))}>
+            <Plus className="h-4 w-4 text-muted" /> Planning preferences (routines, bedtime)
           </Command.Item>
           <Command.Item value="new reminder" className={item} onSelect={() => go(() => router.push("/reminders?new=1"))}>
             <Plus className="h-4 w-4 text-muted" /> New reminder

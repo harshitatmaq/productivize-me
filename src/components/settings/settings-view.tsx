@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Briefcase, CalendarDays, Download, HeartHandshake, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
+import { BellRing, Briefcase, CalendarClock, CalendarDays, Download, HeartHandshake, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { api, timeAgo } from "@/lib/utils";
 import { CalendarFeed } from "./calendar-feed";
 import { GmailCard } from "./gmail-card";
 import { IntegrationStatus } from "./integration-status";
+import { PlanningPrefsCard } from "./planning-prefs";
 
 function Section({ id, title, icon, children, description }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode; description?: string }) {
   return (
@@ -207,6 +208,14 @@ export function SettingsView() {
     }
   }, []);
 
+  // Deep links like /settings#planning: scroll once the (client-rendered) page exists.
+  const ready = !!profile;
+  useEffect(() => {
+    if (!ready || !window.location.hash) return;
+    const t = setTimeout(() => document.querySelector(window.location.hash)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    return () => clearTimeout(t);
+  }, [ready]);
+
   if (!profile) return null;
   const set = (patch: Partial<Profile>) => update.mutate(patch, { onError: (e) => toast.error((e as Error).message) });
 
@@ -243,6 +252,15 @@ export function SettingsView() {
               </Field>
             </div>
           </Card>
+        </Section>
+
+        <Section
+          id="planning"
+          title="Planning preferences"
+          icon={<CalendarClock className="h-4 w-4" />}
+          description="How you like your day to run. Plan my day and time suggestions follow these — e.g. reading always at night."
+        >
+          <PlanningPrefsCard profile={profile} />
         </Section>
 
         <Section id="notifications" title="Notifications" icon={<BellRing className="h-4 w-4" />} description="Times for the morning brief, end-of-day review and learning nudge live on the Reminders page.">

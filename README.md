@@ -15,6 +15,8 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 - **Smarter job search**: semantic matching (free embeddings), 👍/👎 that teach Scout your taste, full descriptions read before scoring, Hacker News "Who is hiring?", Workday career sites, auto-discovered boards for your dream companies, follow-up tasks a week after you apply, and a tailored one-click resume PDF.
 - **Flashcards**: turn learning entries into FSRS spaced-repetition cards; job-search gaps become learning suggestions.
 - **Together**: shared dashboards you invite people to by email. Share copies of tasks, jobs, learning notes, flashcards and interests (*Share to…* everywhere), keep shared lists, comment and react, and see each other's weekly numbers.
+- **Planning preferences** (Settings): wake-up time, bedtime, work hours, best focus time and routines such as *Reading & journaling 22:30–23:30*. *Plan my day* treats them as hard rules (and moves anything the AI misplaces), and quick add suggests a routine's time for matching tasks. Describe a habit in your own words and *Remember* turns it into a routine.
+- **Health**: Push / Pull / Legs + Core workouts — today's training day from your rotation, a set logger with last-session numbers and double-progression suggestions, strength charts and PRs, a 4-week streak view, and body weight with a 7-day average, weekly trend and goal.
 - **Interests**: what Scout knows about you — career skills, learning topics and hobbies, each with a strength (from your activity) and a job relevance score that decides whether Scout uses it for job search. Scout suggests new ones and asks short check-in questions (max 2 a day).
 
 ## Stack
@@ -44,7 +46,7 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 ### 1. Supabase (free)
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql), then [`0004_sharing_interests.sql`](supabase/migrations/0004_sharing_interests.sql). All are safe to re-run.
+2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql), then [`0004_sharing_interests.sql`](supabase/migrations/0004_sharing_interests.sql), then [`0005_planning_health.sql`](supabase/migrations/0005_planning_health.sql). All are safe to re-run.
 3. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off "Allow new users to sign up"**. Only accounts you create can log in.
 4. Create the two accounts, either in **Authentication → Users → Add user** (tick "Auto confirm") or from the command line after step 3 below:
    ```bash

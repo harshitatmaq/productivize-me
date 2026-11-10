@@ -1,5 +1,6 @@
 "use client";
 
+import { HealthWidget } from "@/components/health/health-widget";
 import { CheckIns } from "@/components/interests/check-ins";
 import { Tip } from "@/components/ui/menu";
 import { useQuery } from "@tanstack/react-query";
@@ -140,6 +141,7 @@ export function TodayRail() {
         ) : null}
       </Widget>
 
+      <HealthWidget />
       <Widget title="Learning" icon={<GraduationCap className="h-3.5 w-3.5 text-accent" />} href="/learning">
         <div className="flex items-center gap-3">
           <ProgressRing value={learnDays / goal} size={44} stroke={4} color={learnDays >= goal ? "var(--success)" : "var(--accent)"}>

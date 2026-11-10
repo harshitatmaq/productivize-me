@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarClock, Sparkles, Wand2 } from "lucide-react";
+import { CalendarClock, Settings2, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export function PlanDay() {
       const d = new Date();
       const now = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
       const r = await api<{ plan: DayPlan }>("/api/tasks/plan", {
-        json: { date: today, now, dayEnd: profile?.day_end_time?.slice(0, 5), energy },
+        json: { date: today, now, dayEnd: profile?.day_end_time?.slice(0, 5), energy, weekday: d.getDay() },
       });
       setPlan(r.plan);
     } catch (e) {
@@ -79,7 +80,7 @@ export function PlanDay() {
           if (!o) setPlan(null);
         }}
         title="Plan my day"
-        description="The AI orders what's left today around fixed-time tasks, estimates and priorities."
+        description="The AI orders what's left today around fixed-time tasks, your routines and bedtime, estimates and priorities."
         size="md"
         footer={
           plan ? (
@@ -114,11 +115,24 @@ export function PlanDay() {
                 { value: "high", label: "High ⚡" },
               ]}
             />
+            <PrefsSummary profile={profile} />
             <p className="text-[12px] text-muted">Tip: add estimates like “~30m” when you create tasks — plans get much more realistic.</p>
           </div>
         ) : (
           <div className="space-y-4">
             {plan.summary ? <p className="text-[13px] leading-relaxed text-fg-2">{plan.summary}</p> : null}
+            {plan.followed?.length ? (
+              <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/[0.06] p-2.5 text-[12px] text-fg-2">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                <span>
+                  Followed your preferences
+                  {plan.adjusted ? ` (moved ${plan.adjusted} task${plan.adjusted > 1 ? "s" : ""} the AI had placed elsewhere)` : ""}.{" "}
+                  <Link href="/settings#planning" className="text-accent hover:underline" onClick={() => setOpen(false)}>
+                    Edit preferences
+                  </Link>
+                </span>
+              </div>
+            ) : null}
             <ol className="relative space-y-2 border-l border-line pl-4">
               {plan.blocks.map((b) => (
                 <li key={b.task_id} className="relative">
@@ -152,5 +166,35 @@ export function PlanDay() {
         )}
       </Dialog>
     </>
+  );
+}
+
+function PrefsSummary({ profile }: { profile: ReturnType<typeof useProfile>["data"] }) {
+  const p = profile?.planning ?? {};
+  const routines = p.routines ?? [];
+  const bits = [p.wake ? `up ${formatTime(p.wake)}` : null, p.sleep ? `bed ${formatTime(p.sleep)}` : null, p.work ? `work ${formatTime(p.work.start)}–${formatTime(p.work.end)}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="rounded-lg border border-line bg-panel-2/50 p-3 text-[12.5px]">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-medium text-fg-2">Your preferences</span>
+        <Link href="/settings#planning" className="inline-flex items-center gap-1 text-accent hover:underline">
+          <Settings2 className="h-3 w-3" /> Edit
+        </Link>
+      </div>
+      {bits || routines.length ? (
+        <div className="space-y-0.5 text-muted">
+          {bits ? <div>{bits}</div> : null}
+          {routines.map((r) => (
+            <div key={r.id}>
+              {r.label}: {formatTime(r.start)}–{formatTime(r.end)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-muted">None yet — add your bedtime and routines (e.g. reading at night) so plans fit how you live.</div>
+      )}
+    </div>
   );
 }
