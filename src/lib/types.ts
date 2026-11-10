@@ -75,6 +75,9 @@ export type Profile = {
   job_alert_min_score: number;
   calendar_token: string | null;
   share_progress: boolean;
+  /** How you like your day to run — Plan my day follows it. */
+  planning: import("@/lib/planning").PlanningPrefs;
+  health: import("@/lib/health").HealthSettings;
 };
 
 export type AppNotification = {
@@ -336,3 +339,38 @@ export type MemoryQuestion = {
   shown_on: string | null;
   created_at: string;
 };
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+export type Exercise = {
+  id: string;
+  name: string;
+  day_type: import("@/lib/health").DayType;
+  measure: import("@/lib/health").Measure;
+  target_sets: number;
+  reps_min: number;
+  reps_max: number;
+  increment: number;
+  sort: number;
+  archived: boolean;
+};
+export type Workout = {
+  id: string;
+  date: string;
+  day_type: import("@/lib/health").DayType | "other" | null;
+  status: "done" | "rest" | "skipped";
+  duration_min: number | null;
+  notes: string | null;
+  created_at: string;
+};
+export type WorkoutSet = {
+  id: string;
+  workout_id: string;
+  exercise_id: string | null;
+  exercise_name: string;
+  set_no: number;
+  reps: number | null;
+  weight: number | null;
+};
+export type BodyMetric = { id: string; date: string; weight: number | null; body_fat: number | null; waist: number | null; note: string | null };
