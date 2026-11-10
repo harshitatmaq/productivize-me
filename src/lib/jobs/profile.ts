@@ -131,6 +131,8 @@ export async function onboardingTurn(params: {
   history: OnboardingTurn[];
   profile: JobProfile;
   resumeText?: string | null;
+  /** What Productivize already knows about them (likes, values, ways of working). */
+  memory?: string[];
 }): Promise<OnboardingReply & { provider: string }> {
   const messages: ChatMessage[] = [
     { role: "system", content: ONBOARDING_SYSTEM },
@@ -138,7 +140,7 @@ export async function onboardingTurn(params: {
       role: "system",
       content: `Profile collected so far (JSON):\n${JSON.stringify(params.profile).slice(0, 6000)}${
         params.resumeText ? `\n\nResume text (may be partial):\n${params.resumeText.slice(0, 9000)}` : ""
-      }`,
+      }${params.memory?.length ? `\n\nAlready known about them from the app (don't ask again; use it):\n- ${params.memory.join("\n- ")}` : ""}`,
     },
     ...params.history.slice(-16).map((t) => ({ role: t.role, content: t.content.slice(0, 6000) })),
   ];

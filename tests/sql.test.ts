@@ -317,3 +317,35 @@ describe("chat", () => {
     await db.exec(`reset role`);
   });
 });
+
+describe("personal memory", () => {
+  it("keeps memories private, one per statement, and supports fact check-ins and plan-owned times", async () => {
+    await db.exec(`reset role`);
+    await asUser(u1);
+    await db.exec(`set role authenticated`);
+    const f = await one<{ id: string; status: string; source: string }>(
+      `insert into public.user_facts (statement, key, kind, confidence, status, source) values ('Reads at night after 22:30', '22:30 night reads', 'schedule', 70, 'suggested', 'learned') returning id, status, source`,
+    );
+    expect(f.status).toBe("suggested");
+    await expect(db.exec(`insert into public.user_facts (statement, key) values ('Reads at night, after 22:30', '22:30 night reads')`)).rejects.toThrow();
+    await db.exec(`insert into public.memory_questions (kind, fact_id, question) values ('confirm_fact', '${f.id}', 'Right?')`);
+    await expect(db.exec(`insert into public.memory_questions (kind, fact_id, question) values ('confirm_fact', '${f.id}', 'Right again?')`)).rejects.toThrow();
+    await db.exec(`insert into public.memory_inbox (source, text) values ('plan-day', 'Azure needs about two hours')`);
+    await expect(db.exec(`insert into public.user_facts (statement, key, kind) values ('x y z', 'xyz', 'astrology')`)).rejects.toThrow();
+
+    // Someone else sees none of it and can't write as you.
+    await db.exec(`reset role`);
+    await asUser(u2);
+    await db.exec(`set role authenticated`);
+    expect((await db.query(`select * from public.user_facts`)).rows).toHaveLength(0);
+    expect((await db.query(`select * from public.memory_inbox`)).rows).toHaveLength(0);
+    await expect(db.exec(`insert into public.user_facts (user_id, statement, key) values ('${u1}', 'Hates mornings', 'hates mornings')`)).rejects.toThrow();
+
+    // Plan-owned task times.
+    const t = await one<{ id: string }>(
+      `insert into public.tasks (title, due_date, due_time, planned_time) values ('Read 20 pages', current_date, '22:30', '22:30') returning id`,
+    );
+    expect((await one<{ planned_time: string }>(`select planned_time::text from public.tasks where id = '${t.id}'`)).planned_time).toBe("22:30:00");
+    await db.exec(`reset role`);
+  });
+});

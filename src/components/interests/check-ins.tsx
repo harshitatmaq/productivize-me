@@ -13,6 +13,8 @@ const LABELS: Record<MemoryQuestion["kind"], { yes: string; no: string }> = {
   confirm_interest: { yes: "Yes, that's me", no: "Not interested" },
   job_use: { yes: "Use it for jobs", no: "Don't" },
   exclude_term: { yes: "Hide them", no: "Keep showing" },
+  confirm_fact: { yes: "That's right", no: "Not true" },
+  fact_routine: { yes: "Make it a routine", no: "Keep it flexible" },
 };
 
 /** Scout's check-in questions (max 2 a day). Hidden when there's nothing to ask. */
@@ -24,7 +26,7 @@ export function CheckIns({ className }: { className?: string }) {
   return (
     <Card className={cn("p-4", className)}>
       <div className="mb-3 flex items-center gap-2 text-[13px] font-medium text-fg">
-        <MessageCircleQuestion className="h-4 w-4 text-accent" /> Scout has a question
+        <MessageCircleQuestion className="h-4 w-4 text-accent" /> {questions.some((q) => q.kind.includes("fact")) ? "Quick question" : "Scout has a question"}
       </div>
       <div className="space-y-3">
         <AnimatePresence initial={false}>

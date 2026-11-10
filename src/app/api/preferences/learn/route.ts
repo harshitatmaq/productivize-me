@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
+import { saveStatedFacts } from "@/lib/memory/personal";
 import { sanitizePrefs, type PlanningPrefs, type Routine } from "@/lib/planning";
 
 const Body = z.object({ text: z.string().trim().min(3).max(500) });
@@ -12,6 +13,8 @@ type Learned = {
   work?: { start: string; end: string; days: number[] };
   focus_peak?: "morning" | "afternoon" | "evening";
   note?: string;
+  /** Likes, dislikes, beliefs, goals, ways of working — saved to "What the AI knows". */
+  facts?: { statement: string; kind: string }[];
   summary?: string;
 };
 
@@ -42,7 +45,9 @@ export async function POST(request: Request) {
               content: `Turn the person's sentence about their daily routine into JSON. Times are 24h HH:MM. Days: 0=Sun … 6=Sat (empty = every day).
 Return ONLY JSON with any of: {"routines":[{"label":"short name","keywords":["words that would appear in matching task titles, lowercase, include synonyms"],"start":"HH:MM","end":"HH:MM","days":[]}],
 "wake":"HH:MM","sleep":"HH:MM","work":{"start":"HH:MM","end":"HH:MM","days":[1,2,3,4,5]},"focus_peak":"morning"|"afternoon"|"evening",
-"note":"anything that doesn't fit the fields, in their words","summary":"one short sentence confirming what you saved"}.
+"facts":[{"statement":"short third-person statement, e.g. 'Prefers deep work before lunch' or 'Believes rest days matter'","kind":"schedule|habit|work_style|like|dislike|value|goal|life"}],
+"note":"only timing details that don't fit the fields","summary":"one short sentence confirming what you saved"}.
+Put likes, dislikes, beliefs, values, goals and ways of working in "facts" (not in "note").
 If they give a start but no end, make the window 60 minutes. "After 10:30 PM" means start 22:30.`,
             },
             { role: "user", content: text },
@@ -54,6 +59,8 @@ If they give a start but no end, make the window 60 minutes. "After 10:30 PM" me
     } catch {
       learned = { note: text, summary: "Saved to your notes — the AI reads them every time it plans your day." };
     }
+    const facts = (Array.isArray(learned.facts) ? learned.facts : []).filter((f) => f && typeof f.statement === "string").slice(0, 6);
+    const saved = await saveStatedFacts(supabase, user.id, facts, `You wrote: “${text.slice(0, 120)}”`).catch(() => []);
 
     const next: PlanningPrefs = sanitizePrefs({
       ...current,
@@ -70,6 +77,6 @@ If they give a start but no end, make the window 60 minutes. "After 10:30 PM" me
     });
     const { error } = await supabase.from("profiles").update({ planning: next }).eq("id", user.id);
     if (error) throw new HttpError(500, `${error.message} (did you run supabase/migrations/0005_planning_health_chat_memory.sql?)`);
-    return { ok: true, planning: next, summary: learned.summary ?? "Saved." };
+    return { ok: true, planning: next, facts: saved.length, summary: learned.summary ?? "Saved." };
   });
 }
