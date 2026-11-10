@@ -46,7 +46,7 @@ A calm, Linear-style productivity app for two people, built only on open-source 
 ### 1. Supabase (free)
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql), then [`0004_sharing_interests.sql`](supabase/migrations/0004_sharing_interests.sql), then [`0005_planning_health.sql`](supabase/migrations/0005_planning_health.sql), then [`0006_chat.sql`](supabase/migrations/0006_chat.sql). All are safe to re-run. 0006 also creates the private `chat-images` storage bucket and adds the chat tables to Supabase Realtime.
+2. In **SQL Editor**, paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_more_features.sql`](supabase/migrations/0002_more_features.sql), then [`0003_scout_worker.sql`](supabase/migrations/0003_scout_worker.sql), then [`0004_sharing_interests.sql`](supabase/migrations/0004_sharing_interests.sql), then [`0005_planning_health_chat_memory.sql`](supabase/migrations/0005_planning_health_chat_memory.sql) (planning, health, chat + board, personal memory — one file). All are safe to re-run. 0005 also creates the private `chat-images` storage bucket and adds the chat tables to Supabase Realtime.
 3. **Authentication → Sign In / Providers → Email**: keep Email enabled and **turn off "Allow new users to sign up"**. Only accounts you create can log in.
 4. Create the two accounts, either in **Authentication → Users → Add user** (tick "Auto confirm") or from the command line after step 3 below:
    ```bash
@@ -119,7 +119,7 @@ The [GitHub Actions workflow](.github/workflows/scheduler.yml) is a manual alter
 - **Unlimited web search:** [deploy/searxng](deploy/searxng/README.md) (Oracle Cloud Always Free + Caddy).
 - **Calendar:** Settings → Calendar feed → *Add to Google Calendar* / *Open in Apple Calendar*.
 - **Together:** create a shared dashboard and invite the other person by email (Together → New shared dashboard). Invite emails go out through the Gmail SMTP settings above; without them the app shows a one-time link you can send yourself. Turn on *Share my weekly progress* to see each other's totals.
-- **Chat and Board** need nothing extra beyond migration 0006: Supabase Realtime and Storage are on by default in new projects. If live updates never arrive, check **Database → Publications → supabase_realtime** lists `chat_messages`, `board_items` and the other `chat_*` tables. Optional: set `CHAT_PROPOSAL_SECRET` (any long random string) to sign the board assistant's approval cards; without it the app uses `SUPABASE_SECRET_KEY`.
+- **Chat and Board** need nothing extra beyond migration 0005: Supabase Realtime and Storage are on by default in new projects. If live updates never arrive, check **Database → Publications → supabase_realtime** lists `chat_messages`, `board_items` and the other `chat_*` tables. Optional: set `CHAT_PROPOSAL_SECRET` (any long random string) to sign the board assistant's approval cards; without it the app uses `SUPABASE_SECRET_KEY`.
 - **Bringing over an existing two-chat history** (one-time, additive, safe to re-run). In your own terminal, never in a chat or a file you commit:
   ```bash
   # PowerShell: $env:OLD_SUPABASE_URL="https://<old-project>.supabase.co"; $env:OLD_SUPABASE_SERVICE_ROLE_KEY="<old service_role key>"

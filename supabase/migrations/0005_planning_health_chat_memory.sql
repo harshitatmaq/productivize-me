@@ -1,11 +1,149 @@
 -- =============================================================================
--- Productivize Me — 0006: Chat + Board inside shared dashboards (ported from
--- two-chat), and identity colours per person per dashboard.
--- Run after 0005 (safe to re-run).
+-- Productivize Me — 0005: everything after 0004, in one file.
 --
--- Every row belongs to a shared dashboard (space) and is visible only to its
--- members (is_space_member from 0004). People are Productivize accounts.
+-- Run this ONE file in the Supabase SQL Editor after 0001–0004. It is safe to
+-- run again (also if you already ran an older 0005/0006 file). It contains:
+--
+--   Part 1 · Planning preferences + Health (PPL + Core workouts, progression,
+--            body weight)
+--   Part 2 · Together: Chat + Board in every shared dashboard, per-person
+--            colours, private chat-images bucket, Realtime
+--   Part 3 · Personal memory (what the AI learns about how you work, what you
+--            like and believe) + re-plannable "Plan my day" times
 -- =============================================================================
+
+-- #############################################################################
+-- Part 1 · Planning preferences + Health
+-- #############################################################################
+
+-- Planning preferences: wake/sleep, work hours, focus peak, routines
+-- ("reading & journaling after 22:30"), free-text notes. Health settings:
+-- unit, rotation order, weekly goal, goal weight.
+alter table public.profiles add column if not exists planning jsonb not null default '{}';
+alter table public.profiles add column if not exists health jsonb not null default '{}';
+
+-- ---------------------------------------------------------------------------
+-- Routine template: the exercises for each training day.
+-- ---------------------------------------------------------------------------
+create table if not exists public.exercises (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  day_type text not null check (day_type in ('push', 'pull', 'legs', 'core')),
+  -- weight_reps: kg × reps · reps: bodyweight reps (weight optional) · time: seconds
+  measure text not null default 'weight_reps' check (measure in ('weight_reps', 'reps', 'time')),
+  target_sets smallint not null default 3 check (target_sets between 1 and 10),
+  reps_min smallint not null default 8 check (reps_min between 1 and 600),
+  reps_max smallint not null default 12 check (reps_max between 1 and 600),
+  increment numeric(6, 2) not null default 2.5 check (increment >= 0),
+  sort double precision not null default 0,
+  archived boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (reps_max >= reps_min)
+);
+create index if not exists exercises_user_idx on public.exercises (user_id, day_type, sort);
+
+-- One entry per day: done / rest / skipped, with its training day.
+create table if not exists public.workouts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date date not null,
+  day_type text check (day_type in ('push', 'pull', 'legs', 'core', 'other')),
+  status text not null default 'done' check (status in ('done', 'rest', 'skipped')),
+  duration_min smallint check (duration_min between 0 and 600),
+  notes text check (char_length(notes) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, date)
+);
+create index if not exists workouts_user_date_idx on public.workouts (user_id, date desc);
+
+create table if not exists public.workout_sets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  workout_id uuid not null references public.workouts (id) on delete cascade,
+  exercise_id uuid references public.exercises (id) on delete set null,
+  exercise_name text not null check (char_length(exercise_name) between 1 and 80),
+  set_no smallint not null default 1,
+  reps smallint check (reps between 0 and 600),
+  weight numeric(7, 2) check (weight >= 0),
+  created_at timestamptz not null default now()
+);
+create index if not exists workout_sets_workout_idx on public.workout_sets (workout_id, set_no);
+create index if not exists workout_sets_exercise_idx on public.workout_sets (user_id, exercise_id, created_at desc);
+
+-- Body weight (and optional body fat / waist), one row per day.
+create table if not exists public.body_metrics (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date date not null,
+  weight numeric(6, 2) check (weight > 0 and weight < 700),
+  body_fat numeric(4, 1) check (body_fat between 1 and 80),
+  waist numeric(5, 1) check (waist > 0 and waist < 400),
+  note text check (char_length(note) <= 500),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, date)
+);
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['exercises', 'workouts', 'body_metrics']
+  loop
+    execute format('drop trigger if exists %I on public.%I', t || '_updated_at', t);
+    execute format('create trigger %I before update on public.%I for each row execute function public.set_updated_at()', t || '_updated_at', t);
+  end loop;
+end;
+$$;
+
+-- A set always belongs to its owner's workout.
+create or replace function public.workout_set_owner()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.workouts w where w.id = new.workout_id and w.user_id = new.user_id) then
+    raise exception 'workout not found';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists workout_sets_owner on public.workout_sets;
+create trigger workout_sets_owner before insert or update on public.workout_sets for each row execute function public.workout_set_owner();
+
+alter table public.exercises enable row level security;
+alter table public.workouts enable row level security;
+alter table public.workout_sets enable row level security;
+alter table public.body_metrics enable row level security;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['exercises', 'workouts', 'workout_sets', 'body_metrics']
+  loop
+    execute format('drop policy if exists "own rows" on public.%I', t);
+    execute format(
+      'create policy "own rows" on public.%I for all to authenticated
+         using (user_id = (select auth.uid()))
+         with check (user_id = (select auth.uid()))',
+      t
+    );
+  end loop;
+end;
+$$;
+
+grant select, insert, update, delete on public.exercises, public.workouts, public.workout_sets, public.body_metrics to authenticated;
+grant all on public.exercises, public.workouts, public.workout_sets, public.body_metrics to service_role;
+
+-- #############################################################################
+-- Part 2 · Together: Chat + Board, per-person colours
+-- #############################################################################
 
 -- ---------------------------------------------------------------------------
 -- Identity colour per person per dashboard. Two people in one dashboard can
@@ -367,3 +505,96 @@ begin
     end loop;
   end if;
 end $$;
+
+-- #############################################################################
+-- Part 3 · Personal memory + re-plannable plan times
+-- #############################################################################
+
+-- Learning can be switched off in Settings; existing memories are still used.
+alter table public.profiles add column if not exists memory_learning boolean not null default true;
+alter table public.profiles add column if not exists memory_learned_at timestamptz;
+
+-- The time "Plan my day" gave a task. While due_time still equals it, the time
+-- belongs to the plan and a new plan may move it; once you change the time
+-- yourself it is fixed.
+alter table public.tasks add column if not exists planned_time time;
+
+-- ---------------------------------------------------------------------------
+-- Things the AI knows about you. One short statement each.
+-- ---------------------------------------------------------------------------
+create table if not exists public.user_facts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  kind text not null default 'habit'
+    check (kind in ('schedule', 'habit', 'work_style', 'like', 'dislike', 'value', 'goal', 'life')),
+  statement text not null check (char_length(statement) between 3 and 240),
+  -- Normalised statement, so the same thing isn't stored twice.
+  key text not null check (char_length(key) between 1 and 240),
+  -- 0-100. Statements you made yourself start high; learned ones grow with evidence.
+  confidence integer not null default 60 check (confidence between 0 and 100),
+  -- active: used by the AI · suggested: waiting for you to confirm · rejected: "not true", never suggested again
+  status text not null default 'active' check (status in ('active', 'suggested', 'rejected')),
+  -- you: you said or wrote it · learned: noticed from how you use the app
+  source text not null default 'learned' check (source in ('you', 'learned')),
+  -- Pinned facts are always given to the AI and never weakened automatically.
+  pinned boolean not null default false,
+  evidence jsonb not null default '[]',
+  evidence_count integer not null default 0,
+  -- Optional time window this implies ({label, keywords, start, end, days}); becomes a
+  -- planning routine when you accept it.
+  routine jsonb,
+  last_seen_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists user_facts_user_key_idx on public.user_facts (user_id, key);
+create index if not exists user_facts_user_status_idx on public.user_facts (user_id, status, confidence desc);
+drop trigger if exists user_facts_updated_at on public.user_facts;
+create trigger user_facts_updated_at before update on public.user_facts for each row execute function public.set_updated_at();
+
+-- What you tell the AI in your own words (Scout chat, Search & ask, plan
+-- changes, "Remember this"), waiting for the daily learning pass.
+create table if not exists public.memory_inbox (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  source text not null check (char_length(source) between 1 and 40),
+  text text not null check (char_length(text) between 1 and 2000),
+  processed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists memory_inbox_user_idx on public.memory_inbox (user_id, processed_at, created_at desc);
+
+-- Check-in questions can now confirm a learned fact, or turn one into a routine.
+alter table public.memory_questions add column if not exists fact_id uuid references public.user_facts (id) on delete cascade;
+alter table public.memory_questions drop constraint if exists memory_questions_kind_check;
+alter table public.memory_questions add constraint memory_questions_kind_check
+  check (kind in ('confirm_interest', 'job_use', 'exclude_term', 'confirm_fact', 'fact_routine'));
+drop index if exists public.memory_questions_open_idx;
+create unique index if not exists memory_questions_open_idx
+  on public.memory_questions (user_id, kind, coalesce(interest_id::text, fact_id::text, term)) where status = 'pending';
+
+-- ---------------------------------------------------------------------------
+-- RLS: your own rows only.
+-- ---------------------------------------------------------------------------
+alter table public.user_facts enable row level security;
+alter table public.memory_inbox enable row level security;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['user_facts', 'memory_inbox']
+  loop
+    execute format('drop policy if exists "own rows" on public.%I', t);
+    execute format(
+      'create policy "own rows" on public.%I for all to authenticated
+         using (user_id = (select auth.uid()))
+         with check (user_id = (select auth.uid()))',
+      t
+    );
+  end loop;
+end;
+$$;
+
+grant select, insert, update, delete on public.user_facts, public.memory_inbox to authenticated;
+grant all on public.user_facts, public.memory_inbox to service_role;
