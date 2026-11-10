@@ -10,7 +10,6 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
-  Plus,
   Share2,
   Trash2,
   UserMinus,
@@ -31,32 +30,27 @@ import { useBuddyStats } from "@/lib/queries/buddy";
 import { useProfile, useUpdateProfile, useUser } from "@/lib/queries/profile";
 import {
   useAddComment,
-  useAddList,
-  useAddListItem,
   useDeleteComment,
-  useDeleteList,
-  useDeleteListItem,
   useDeleteSpace,
   useDeleteSpaceItem,
   useRemoveMember,
+  useSetMyColor,
   useShareTo,
   useSpaceComments,
   useSpaceItems,
-  useSpaceListItems,
-  useSpaceLists,
   useSpacePeople,
   useSpaceReactions,
   useSpaceRealtime,
   useToggleReaction,
-  useUpdateList,
-  useUpdateListItem,
   useUpdateSpace,
   useUpdateSpaceItem,
 } from "@/lib/queries/spaces";
 import { COPY_LABEL, openShare, shareLink, shareNote, takeCopy } from "@/lib/share";
 import { startOfWeek } from "@/lib/time";
-import type { ShareKind, Space, SpaceComment, SpaceItem, SpaceList, SpaceListItem, SpacePerson, SpaceReaction } from "@/lib/types";
+import type { ShareKind, Space, SpaceComment, SpaceItem,  SpacePerson, SpaceReaction } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
+import { SpaceChat } from "@/components/chat/space-chat";
+import { IDENTITY_COLORS } from "@/lib/chat/colors";
 import { InviteDialog } from "./invite-dialog";
 import { KIND_NAMES, KindIcon } from "./kind-icon";
 import { PersonCard } from "./person-card";
@@ -64,11 +58,12 @@ import { PersonCard } from "./person-card";
 const REACTIONS = ["👍", "❤️", "🎉", "👀", "🔥"];
 const JOB_STATUSES = ["Interested", "Applied", "Interviewing", "Offer", "Not for us"];
 
-function Avatar({ name, className }: { name: string; className?: string }) {
+/** Person avatar in their dashboard identity colour (who added what). */
+function Avatar({ name, color, className }: { name: string; color?: string | null; className?: string }) {
   return (
     <span
       className={cn(
-        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8b93f5] to-[#5e6ad2] text-[9.5px] font-semibold text-white ring-2 ring-bg",
+        `who-${color ?? "slate"} flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-who text-[9.5px] font-semibold text-who-ink ring-2 ring-bg`,
         className,
       )}
       title={name}
@@ -138,11 +133,13 @@ function Comments({
   item,
   comments,
   nameOf,
+  colorOf,
   me,
 }: {
   item: SpaceItem;
   comments: SpaceComment[];
   nameOf: (id: string | null) => string;
+  colorOf?: (id: string | null) => string | null | undefined;
   me: string | undefined;
 }) {
   const [text, setText] = useState("");
@@ -152,7 +149,7 @@ function Comments({
     <div className="mt-3 space-y-2 border-t border-line pt-3">
       {comments.map((c) => (
         <div key={c.id} className="group flex items-start gap-2 text-[12.5px]">
-          <Avatar name={nameOf(c.user_id)} className="h-5 w-5 text-[8.5px] ring-0" />
+          <Avatar name={nameOf(c.user_id)} color={colorOf?.(c.user_id)} className="h-5 w-5 text-[8.5px] ring-0" />
           <div className="min-w-0 flex-1">
             <span className="font-medium text-fg-2">{nameOf(c.user_id)}</span> <span className="text-faint">{timeAgo(c.created_at)}</span>
             <div className="whitespace-pre-wrap break-words text-fg-2">{c.body}</div>
@@ -319,7 +316,11 @@ function ItemCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.98 }}
-      className={cn("rounded-xl border border-line bg-panel p-4", focused && "border-accent/40", item.done && "opacity-70")}
+      className={cn(
+        `who-${people.find((p) => p.user_id === item.shared_by)?.color ?? "slate"} rounded-xl border border-l-[3px] border-line border-l-who bg-panel p-4`,
+        focused && "border-accent/40",
+        item.done && "opacity-70",
+      )}
     >
       <div className="flex items-start gap-3">
         {item.kind === "task" ? (
@@ -422,7 +423,7 @@ function ItemCard({
               <Copy className="h-3.5 w-3.5" /> {COPY_LABEL[item.kind]}
             </Button>
           </div>
-          {showComments ? <Comments item={item} comments={comments} nameOf={nameOf} me={me} /> : null}
+          {showComments ? <Comments item={item} comments={comments} nameOf={nameOf} colorOf={(id) => people.find((p) => p.user_id === id)?.color} me={me} /> : null}
         </div>
       </div>
     </motion.article>
@@ -491,137 +492,6 @@ function Feed({ space, people, me, focusItem }: { space: Space; people: SpacePer
 }
 
 // ---------------------------------------------------------------------------
-// Shared lists
-// ---------------------------------------------------------------------------
-
-function ListCard({ list, items, nameOf, me }: { list: SpaceList; items: SpaceListItem[]; nameOf: (id: string | null) => string; me: string | undefined }) {
-  const [text, setText] = useState("");
-  const [showDone, setShowDone] = useState(false);
-  const add = useAddListItem();
-  const upd = useUpdateListItem();
-  const del = useDeleteListItem();
-  const rename = useUpdateList();
-  const remove = useDeleteList();
-  const open = items.filter((i) => !i.done);
-  const done = items.filter((i) => i.done);
-  const row = (i: SpaceListItem) => (
-    <motion.li key={i.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="group flex items-center gap-2.5 py-1.5">
-      <button
-        role="checkbox"
-        aria-checked={i.done}
-        aria-label={i.done ? `Mark “${i.text}” not done` : `Mark “${i.text}” done`}
-        onClick={() => upd.mutate({ item: i, patch: { done: !i.done } })}
-        className={cn(
-          "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-          i.done ? "border-success bg-success text-[9px] text-white" : "border-line-strong hover:border-accent",
-        )}
-      >
-        {i.done ? "✓" : null}
-      </button>
-      <span className={cn("min-w-0 flex-1 text-[13px]", i.done ? "text-faint line-through" : "text-fg-2")}>{i.text}</span>
-      {i.done && i.done_by ? <span className="shrink-0 text-[11px] text-faint">{i.done_by === me ? "you" : nameOf(i.done_by)}</span> : null}
-      <Tip content="Delete item">
-        <button onClick={() => del.mutate(i)} aria-label={`Delete “${i.text}”`} className="rounded p-0.5 text-faint opacity-0 hover:text-danger group-hover:opacity-100 focus:opacity-100">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </Tip>
-    </motion.li>
-  );
-  return (
-    <Card className="p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-fg">{list.title}</h3>
-        <span className="text-[11.5px] tabular-nums text-faint">
-          {done.length}/{items.length}
-        </span>
-        <Menu
-          label="List actions — rename, delete"
-          trigger={
-            <button aria-label="List actions" className="rounded-md p-1 text-faint hover:bg-panel-hover hover:text-fg">
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          }
-        >
-          <MenuItem
-            icon={<Pencil className="h-3.5 w-3.5" />}
-            onSelect={() => {
-              const t = window.prompt("Rename list", list.title)?.trim();
-              if (t) rename.mutate({ list, title: t });
-            }}
-          >
-            Rename
-          </MenuItem>
-          <MenuItem
-            danger
-            icon={<Trash2 className="h-3.5 w-3.5" />}
-            onSelect={() => window.confirm(`Delete “${list.title}” for everyone?`) && remove.mutate(list)}
-          >
-            Delete list
-          </MenuItem>
-        </Menu>
-      </div>
-      <ul>
-        <AnimatePresence initial={false}>{open.map(row)}</AnimatePresence>
-      </ul>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!text.trim()) return;
-          add.mutate({ list, text: text.trim() }, { onSuccess: () => setText("") });
-        }}
-        className="mt-1 flex items-center gap-2"
-      >
-        <Plus className="h-4 w-4 shrink-0 text-faint" />
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add an item" aria-label={`Add to ${list.title}`} className="h-8 flex-1 bg-transparent text-[13px] text-fg outline-none placeholder:text-faint" maxLength={300} />
-      </form>
-      {done.length ? (
-        <div className="mt-2 border-t border-line pt-2">
-          <button onClick={() => setShowDone((s) => !s)} className="text-[12px] text-muted hover:text-fg" aria-expanded={showDone}>
-            {showDone ? "Hide" : "Show"} {done.length} done
-          </button>
-          {showDone ? <ul className="mt-1">{done.map(row)}</ul> : null}
-        </div>
-      ) : null}
-    </Card>
-  );
-}
-
-function Lists({ space, people, me }: { space: Space; people: SpacePerson[]; me: string | undefined }) {
-  const { data: lists = [], isLoading } = useSpaceLists(space.id);
-  const { data: items = [] } = useSpaceListItems(space.id);
-  const add = useAddList();
-  const [title, setTitle] = useState("");
-  const nameOf = (id: string | null) => people.find((p) => p.user_id === id)?.name ?? "Someone";
-  return (
-    <div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (title.trim()) add.mutate({ spaceId: space.id, title: title.trim() }, { onSuccess: () => setTitle("") });
-        }}
-        className="mb-4 flex gap-2"
-      >
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New list — e.g. Groceries, Interview prep plan, Trip packing" aria-label="New list name" className="field h-9 flex-1" maxLength={120} />
-        <Button type="submit" variant="primary" loading={add.isPending} disabled={!title.trim()}>
-          <Plus className="h-4 w-4" /> New list
-        </Button>
-      </form>
-      {isLoading ? (
-        <Skeleton className="h-32 rounded-xl" />
-      ) : !lists.length ? (
-        <EmptyState title="No shared lists yet">Lists here can be edited and ticked off by everyone in {space.name}.</EmptyState>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {lists.map((l) => (
-            <ListCard key={l.id} list={l} items={items.filter((i) => i.list_id === l.id)} nameOf={nameOf} me={me} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // People + weekly progress
 // ---------------------------------------------------------------------------
 
@@ -632,13 +502,53 @@ function People({ space, people, me, onInvite }: { space: Space; people: SpacePe
   const sharing = !!profile?.share_progress;
   const { data: stats = [], isLoading } = useBuddyStats(startOfWeek(today, profile?.week_starts_on ?? 1), sharing, space.id);
   const remove = useRemoveMember();
+  const setColor = useSetMyColor();
   const isOwner = space.owner_id === me;
+  const mine = people.find((p) => p.user_id === me);
   return (
     <div className="space-y-6">
+      <Card className="p-4">
+        <div className="mb-1 text-[13.5px] text-fg">Your colour in {space.name}</div>
+        <p className="mb-3 text-[12px] text-muted">
+          Everything you add here — messages, notes, tasks, shared items — wears it, the same on everyone&apos;s screen. Two people can&apos;t have the same
+          colour. It only applies inside this dashboard.
+        </p>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Your colour">
+          {IDENTITY_COLORS.map((c) => {
+            const takenBy = people.find((p) => p.color === c.id && p.user_id !== me);
+            const selected = mine?.color === c.id;
+            return (
+              <Tip key={c.id} content={takenBy ? `${c.label} — taken by ${takenBy.name}` : selected ? `${c.label} — yours` : c.label}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={takenBy ? `${c.label}, taken by ${takenBy.name}` : c.label}
+                  disabled={!!takenBy || setColor.isPending}
+                  onClick={() =>
+                    !selected &&
+                    setColor.mutate(
+                      { spaceId: space.id, color: c.id },
+                      { onError: () => toast.error("Someone just took that colour — pick another.") },
+                    )
+                  }
+                  className={cn(
+                    `who-${c.id} relative flex h-9 w-9 items-center justify-center rounded-full bg-who transition-transform`,
+                    selected ? "ring-2 ring-fg ring-offset-2 ring-offset-bg" : "hover:scale-110",
+                    takenBy && "cursor-not-allowed opacity-30",
+                  )}
+                >
+                  {selected ? <span className="text-[13px] text-who-ink">✓</span> : takenBy ? <span className="text-[10px] font-semibold text-who-ink">{initials(takenBy.name)}</span> : null}
+                </button>
+              </Tip>
+            );
+          })}
+        </div>
+      </Card>
       <Card className="divide-y divide-line">
         {people.map((p) => (
           <div key={p.user_id} className="flex items-center gap-3 px-4 py-2.5">
-            <Avatar name={p.name} className="h-7 w-7 text-[10px] ring-0" />
+            <Avatar name={p.name} color={p.color} className="h-7 w-7 text-[10px] ring-0" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] text-fg">
                 {p.name} {p.user_id === me ? <span className="text-faint">(you)</span> : null}
@@ -692,15 +602,20 @@ function People({ space, people, me, onInvite }: { space: Space; people: SpacePe
 
 // ---------------------------------------------------------------------------
 
-export function SpaceView({ space, focusItem }: { space: Space; focusItem: string | null }) {
+export type SpaceTab = "feed" | "chat" | "board" | "people";
+
+export function SpaceView({ space, focusItem, initialTab }: { space: Space; focusItem: string | null; initialTab?: SpaceTab | null }) {
   const router = useRouter();
   const { data: user } = useUser();
   const me = user?.id;
   const { data: people = [] } = useSpacePeople(space.id);
   const { data: items = [] } = useSpaceItems(space.id);
-  const { data: lists = [] } = useSpaceLists(space.id);
   useSpaceRealtime(space.id);
-  const [tab, setTab] = useState<"feed" | "lists" | "people">("feed");
+  const [tab, setTabState] = useState<SpaceTab>(initialTab ?? "feed");
+  const setTab = (t: SpaceTab) => {
+    setTabState(t);
+    router.replace(`/together?space=${space.id}${t === "feed" ? "" : `&tab=${t}`}`);
+  };
   const [inviting, setInviting] = useState(false);
   const rename = useUpdateSpace();
   const del = useDeleteSpace();
@@ -716,7 +631,7 @@ export function SpaceView({ space, focusItem }: { space: Space; focusItem: strin
           <div className="mt-1 flex items-center">
             <div className="flex -space-x-1.5">
               {people.slice(0, 6).map((p) => (
-                <Avatar key={p.user_id} name={p.name} />
+                <Avatar key={p.user_id} name={p.name} color={p.color} />
               ))}
             </div>
             <span className="ml-2 text-[12px] text-muted">
@@ -782,14 +697,17 @@ export function SpaceView({ space, focusItem }: { space: Space; focusItem: strin
           onChange={setTab}
           options={[
             { value: "feed", label: "Shared", count: items.length || undefined },
-            { value: "lists", label: "Lists", count: lists.length || undefined },
+            { value: "chat", label: "Chat" },
+            { value: "board", label: "Board" },
             { value: "people", label: "People & progress", count: people.length || undefined },
           ]}
         />
       </div>
 
       {tab === "feed" ? <Feed space={space} people={people} me={me} focusItem={focusItem} /> : null}
-      {tab === "lists" ? <Lists space={space} people={people} me={me} /> : null}
+      {(tab === "chat" || tab === "board") && me ? (
+        <SpaceChat space={space} me={me} view={tab} onViewChange={setTab} />
+      ) : null}
       {tab === "people" ? <People space={space} people={people} me={me} onInvite={() => setInviting(true)} /> : null}
 
       <InviteDialog space={space} open={inviting} onClose={() => setInviting(false)} />

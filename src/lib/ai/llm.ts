@@ -14,11 +14,24 @@ export type ChatOptions = {
   only?: string[];
   /** Overall deadline for the whole chain. */
   deadlineMs?: number;
+  /** OpenAI-style function tools (every provider in the chain is OpenAI-compatible). */
+  tools?: unknown[];
+  toolChoice?: "auto" | "none" | "required";
 };
+
+export type ToolCall = { function?: { name?: string; arguments?: string } };
 
 export type Attempt = { provider: string; model: string; ok: boolean; ms: number; error?: string };
 
-export type ChatResult = { text: string; provider: string; model: string; attempts: Attempt[] };
+export type ChatResult = {
+  text: string;
+  provider: string;
+  model: string;
+  attempts: Attempt[];
+  /** Present when `tools` were offered and the model called one. */
+  toolCalls?: ToolCall[];
+  finishReason?: string;
+};
 
 export class LlmChainError extends Error {
   attempts: Attempt[];
@@ -70,7 +83,7 @@ async function callProvider(
   model: string,
   opts: ChatOptions,
   timeoutMs: number,
-): Promise<string> {
+): Promise<{ content: string; toolCalls?: ToolCall[]; finishReason?: string }> {
   const body: Record<string, unknown> = {
     model,
     messages: opts.messages,
@@ -80,6 +93,10 @@ async function callProvider(
   if (/gpt-oss/i.test(model)) body.reasoning_effort = "low";
   const wantJsonMode = opts.json && p.supportsJsonMode;
   if (wantJsonMode) body.response_format = { type: "json_object" };
+  if (opts.tools?.length) {
+    body.tools = opts.tools;
+    body.tool_choice = opts.toolChoice ?? "auto";
+  }
 
   const doFetch = async (payload: Record<string, unknown>) => {
     const ctrl = new AbortController();
@@ -125,14 +142,16 @@ async function callProvider(
   }
 
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string | null } }[];
+    choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] }; finish_reason?: string }[];
     error?: { message?: string };
   };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content || !content.trim()) {
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content ?? "";
+  const toolCalls = choice?.message?.tool_calls?.length ? choice.message.tool_calls : undefined;
+  if (!content.trim() && !toolCalls) {
     throw new ProviderError(data.error?.message ?? "empty response");
   }
-  return content;
+  return { content, toolCalls, finishReason: choice?.finish_reason };
 }
 
 /**
@@ -167,11 +186,12 @@ export async function chat(opts: ChatOptions, validate?: (text: string) => void)
       }
       const started = Date.now();
       try {
-        const text = await callProvider(p, model, opts, Math.min(p.timeoutMs, remaining));
+        const out = await callProvider(p, model, opts, Math.min(p.timeoutMs, remaining));
+        const text = out.content;
         validate?.(text);
         attempts.push({ provider: p.id, model, ok: true, ms: Date.now() - started });
         usageRecorder?.(p.id);
-        return { text, provider: p.id, model, attempts };
+        return { text, provider: p.id, model, attempts, toolCalls: out.toolCalls, finishReason: out.finishReason };
       } catch (e) {
         const err = e as ProviderError;
         attempts.push({ provider: p.id, model, ok: false, ms: Date.now() - started, error: err.message });

@@ -26,7 +26,7 @@ beforeAll(async () => {
   } catch {
     // publications unsupported here — the migration skips that block
   }
-  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql", "0005_planning_health.sql"]) {
+  for (const f of ["0001_init.sql", "0002_more_features.sql", "0003_scout_worker.sql", "0004_sharing_interests.sql", "0005_planning_health.sql", "0006_chat.sql"]) {
     const sql = readFileSync(`supabase/migrations/${f}`, "utf8");
     await db.exec(sql);
     await db.exec(sql); // idempotent
@@ -263,5 +263,57 @@ describe("health", () => {
     // Deleting the workout removes its sets.
     await db.exec(`delete from public.workouts where id = '${w.id}'`);
     expect((await one<{ n: number }>(`select count(*)::int as n from public.workout_sets where workout_id = '${w.id}'`)).n).toBe(0);
+  });
+});
+
+describe("chat", () => {
+  const asApp = async (id: string) => {
+    await db.exec(`reset role`);
+    await asUser(id);
+    await db.exec(`set role authenticated`);
+  };
+
+  it("gives members distinct colours, keeps messages inside the dashboard and credits senders", async () => {
+    await db.exec(`reset role`);
+    const p = (await one<{ id: string }>(`insert into auth.users (email) values ('p@x.com') returning id`)).id;
+    const q = (await one<{ id: string }>(`insert into auth.users (email) values ('q@x.com') returning id`)).id;
+    const r = (await one<{ id: string }>(`insert into auth.users (email) values ('r@x.com') returning id`)).id;
+    await asApp(p);
+    const sp = await one<{ id: string }>(`insert into public.spaces (name) values ('Us two') returning id`);
+    await db.exec(`reset role`);
+    await db.exec(`insert into public.space_members (space_id, user_id) values ('${sp.id}', '${q}')`);
+    const colours = (await db.query<{ color: string }>(`select color from public.space_members where space_id = '${sp.id}' order by joined_at`)).rows.map((x) => x.color);
+    expect(colours).toEqual(["green", "purple"]);
+
+    // Can't take someone else's colour; can pick a free one.
+    await asApp(q);
+    await expect(db.exec(`update public.space_members set color = 'green' where space_id = '${sp.id}' and user_id = '${q}'`)).rejects.toThrow();
+    await db.exec(`update public.space_members set color = 'teal' where space_id = '${sp.id}' and user_id = '${q}'`);
+    expect((await db.query(`select color from public.space_people('${sp.id}') where user_id = '${q}'`)).rows).toEqual([{ color: "teal" }]);
+
+    // Messages: members only, and only as yourself.
+    await asApp(p);
+    const m = await one<{ id: string }>(`insert into public.chat_messages (space_id, client_id, body) values ('${sp.id}', 'c1', 'dinner at 8?') returning id`);
+    await expect(db.exec(`insert into public.chat_messages (space_id, client_id, body, sender) values ('${sp.id}', 'c2', 'fake', '${q}')`)).rejects.toThrow();
+    await asApp(q);
+    await db.exec(`insert into public.chat_reactions (message_id, emoji) values ('${m.id}', '👍')`);
+    await db.exec(`insert into public.chat_promises (message_id, message_client_id, body, promiser) values ('${m.id}', 'c1', 'dinner at 8?', '${p}')`);
+    expect((await db.query(`select id from public.chat_search('${sp.id}', 'dinner')`)).rows).toHaveLength(1);
+    // Someone else can't edit your message.
+    await db.exec(`update public.chat_messages set body = 'hacked' where id = '${m.id}'`);
+    expect((await one<{ body: string }>(`select body from public.chat_messages where id = '${m.id}'`)).body).toBe("dinner at 8?");
+
+    // Board: anyone edits, edit is credited to the editor.
+    const b = await one<{ id: string }>(`insert into public.board_items (space_id, client_id, kind, title) values ('${sp.id}', 'b1', 'note', 'Buy flowers') returning id`);
+    await asApp(p);
+    await db.exec(`update public.board_items set title = 'Buy tulips', updated_by = '${p}' where id = '${b.id}'`);
+    await expect(db.exec(`update public.board_items set updated_by = '${q}' where id = '${b.id}'`)).rejects.toThrow();
+
+    // A stranger sees nothing and can't post.
+    await asApp(r);
+    expect((await db.query(`select id from public.chat_messages where space_id = '${sp.id}'`)).rows).toHaveLength(0);
+    expect((await db.query(`select id from public.board_items where space_id = '${sp.id}'`)).rows).toHaveLength(0);
+    await expect(db.exec(`insert into public.chat_messages (space_id, client_id, body) values ('${sp.id}', 'c3', 'hi')`)).rejects.toThrow();
+    await db.exec(`reset role`);
   });
 });
