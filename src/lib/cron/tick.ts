@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { learnPreferences } from "@/lib/memory/personal";
 import { refreshMemory } from "@/lib/memory/refresh";
 import { notify, type NotifyProfile } from "@/lib/notify";
 import { renderEmail } from "@/lib/notify/templates";
@@ -84,6 +85,22 @@ export async function runTick(now = new Date()) {
     }
   } catch (e) {
     console.warn("[tick] memory refresh skipped:", (e as Error).message);
+  }
+  // Personal memory: one person per tick whose preferences haven't been re-learned for 20h.
+  try {
+    const { data: due } = await admin
+      .from("profiles")
+      .select("id")
+      .neq("memory_learning", false)
+      .or(`memory_learned_at.is.null,memory_learned_at.lt.${new Date(now.getTime() - 20 * 3_600_000).toISOString()}`)
+      .order("memory_learned_at", { ascending: true, nullsFirst: true })
+      .limit(1);
+    if (due?.[0]) {
+      const r = await learnPreferences(due[0].id as string);
+      results[`preferences:${due[0].id}`] = [r.skipped ? `skipped: ${r.skipped}` : `learned ${r.added}, suggested ${r.suggested}, confirmed ${r.confirmed}, questions ${r.questions}`];
+    }
+  } catch (e) {
+    console.warn("[tick] preference learning skipped:", (e as Error).message);
   }
   // Housekeeping: keep the in-app inbox small.
   await admin

@@ -25,6 +25,8 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 12 | UI | Every icon-only button gets a visible label on hover/focus, a long-press label on phones, and an accessible name |
 | 15 | Chat (from two-chat) | Lives **inside each shared dashboard** as Chat + Board tabs, works for **any number of people**, keeps all two-chat features (offline outbox, photos, replies, reactions, mentions, pins, promises, saved/work messages, search, read receipts, typing, AI board assistant with approval). **Lists are replaced by the Board** (existing list items moved into Board → Tasks). No separate sign-in: Productivize's login covers it. A one-time script imports an existing two-chat history |
 | 16 | Identity colours | Each member picks a colour **per dashboard**; no two members can share one (database-enforced). It colours their messages, board items, shared-feed cards and avatars **only inside Together**; the rest of the app keeps its theme |
+| 17 | Personal memory | The AI keeps a list of short facts about you (timing, habits, how you work, likes, dislikes, beliefs, goals, life) with confidence and evidence. Your own words are used at once; learned patterns need ≥75 confidence or your yes (asked on Today, max 2 a day); they strengthen when seen again and fade when not. Learned time windows become hard routines only after you confirm. Used by Plan my day, learning suggestions and the Scout interview; never shared |
+| 18 | Plan my day | Real durations (your estimate → your history → AI judgement), start a few minutes from now, re-plan any time with a typed change; times a plan set stay movable until you change them |
 
 ---
 

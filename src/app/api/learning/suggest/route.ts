@@ -1,5 +1,6 @@
 import { chatJson } from "@/lib/ai/llm";
 import { handle, requireUser } from "@/lib/auth";
+import { memoryContext } from "@/lib/memory/personal";
 import type { JobAnalysis, JobProfile } from "@/lib/jobs/types";
 
 export const maxDuration = 90;
@@ -47,6 +48,7 @@ export async function POST() {
       return { ok: true, suggestions: [], message: "Analyze a few jobs with “Tailor with AI” — gaps from those turn into learning suggestions here." };
     }
 
+    const memory = await memoryContext(supabase, user.id, "learning", 10);
     try {
       const { data } = await chatJson<{ suggestions: LearningSuggestion[] }>(
         {
@@ -59,7 +61,7 @@ Return ONLY JSON: {"suggestions":[{"topic":"short topic","why":"one line tying i
             },
             {
               role: "user",
-              content: `Target roles: ${(profile.target_titles ?? []).join(", ")}\nCurrent skills: ${[...have].slice(0, 40).join(", ")}\nRecently learned: ${(recent ?? []).map((r) => r.title).join("; ")}\n\nGaps from job analyses:\n${gaps.slice(0, 40).join("\n")}\n\nKeywords in strong matches missing from profile (count): ${frequent.map(([k, n]) => `${k} (${n})`).join(", ")}`,
+              content: `Target roles: ${(profile.target_titles ?? []).join(", ")}\nCurrent skills: ${[...have].slice(0, 40).join(", ")}\nRecently learned: ${(recent ?? []).map((r) => r.title).join("; ")}\n\nGaps from job analyses:\n${gaps.slice(0, 40).join("\n")}\n\nKeywords in strong matches missing from profile (count): ${frequent.map(([k, n]) => `${k} (${n})`).join(", ")}${memory.length ? `\n\nWhat you know about how they like to learn (fit first steps to this):\n- ${memory.join("\n- ")}` : ""}`,
             },
           ],
           temperature: 0.3,

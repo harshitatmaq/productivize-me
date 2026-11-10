@@ -1,12 +1,14 @@
 "use client";
 
-import { CalendarClock, Settings2, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
+import { Brain, CalendarClock, RefreshCw, Settings2, ShieldCheck, Sparkles, Wand2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/misc";
+import { isPlanOwned, toMin } from "@/lib/planning";
 import { useToday } from "@/lib/hooks";
 import { useProfile } from "@/lib/queries/profile";
 import { useCarryTasks, useTasks, useUpdateTask } from "@/lib/queries/tasks";
@@ -26,17 +28,43 @@ export function PlanDay() {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [loading, setLoading] = useState(false);
   const [setTimes, setSetTimes] = useState(true);
+  const [note, setNote] = useState("");
+  const [change, setChange] = useState("");
   const byId = new Map(tasks.map((t) => [t.id, t]));
 
-  const generate = async () => {
+  /** Builds a plan, or (with `revise`) changes the current one the way you asked. */
+  const generate = async (revise?: string) => {
     setLoading(true);
     try {
       const d = new Date();
       const now = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      const instruction = (revise ?? note).trim() || undefined;
       const r = await api<{ plan: DayPlan }>("/api/tasks/plan", {
-        json: { date: today, now, dayEnd: profile?.day_end_time?.slice(0, 5), energy, weekday: d.getDay() },
+        json: {
+          date: today,
+          now,
+          dayEnd: profile?.day_end_time?.slice(0, 5),
+          energy,
+          weekday: d.getDay(),
+          instruction,
+          previous:
+            revise && plan
+              ? {
+                  blocks: plan.blocks.map(({ task_id, start, end }) => ({
+                    task_id,
+                    start,
+                    end,
+                  })),
+                  defer: plan.defer.map((x) => ({ task_id: x.task_id })),
+                }
+              : undefined,
+        },
       });
       setPlan(r.plan);
+      if (revise) {
+        setChange("");
+        toast.success("Plan updated");
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -50,13 +78,17 @@ export function PlanDay() {
     plan.blocks.forEach((b, i) => {
       const t = byId.get(b.task_id);
       if (!t) return;
+      // Times you set yourself stay; un-timed tasks and times an earlier plan set get the new slot.
+      const movable = !t.due_time || isPlanOwned(t);
       update.mutate({
         id: t.id,
         patch: {
           sort_order: base + i,
-          // Pull overdue items into today and, if asked, give un-timed tasks their slot.
+          // Pull overdue items into today.
           ...(t.due_date !== today ? { due_date: today } : {}),
-          ...(setTimes && !t.due_time ? { due_time: b.start } : {}),
+          ...(setTimes && movable ? { due_time: b.start, planned_time: b.start } : {}),
+          // Remember the AI's estimate so the next plan (and the task row) uses it; you can edit it any time.
+          ...(!t.estimate_minutes && b.estimate_min ? { estimate_minutes: b.estimate_min } : {}),
         },
       });
     });
@@ -66,6 +98,7 @@ export function PlanDay() {
     toast.success(`Plan applied${plan.defer.length ? ` · ${plan.defer.length} moved to tomorrow` : ""}`);
     setOpen(false);
     setPlan(null);
+    setNote("");
   };
 
   return (
@@ -90,14 +123,14 @@ export function PlanDay() {
                 Also set times on un-timed tasks
               </label>
               <Button variant="ghost" onClick={() => setPlan(null)}>
-                Redo
+                Start over
               </Button>
               <Button variant="primary" onClick={apply}>
                 Apply plan
               </Button>
             </>
           ) : (
-            <Button variant="primary" onClick={generate} loading={loading}>
+            <Button variant="primary" onClick={() => generate()} loading={loading}>
               <Sparkles className="h-3.5 w-3.5" /> Build my plan
             </Button>
           )
@@ -115,8 +148,21 @@ export function PlanDay() {
                 { value: "high", label: "High ⚡" },
               ]}
             />
+            <label className="block space-y-1.5">
+              <span className="text-[13px] text-fg-2">Anything to keep in mind today? (optional)</span>
+              <Input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !loading && generate()}
+                placeholder="e.g. call at 5pm, Azure needs ~2h, I'm out after 8"
+                maxLength={500}
+              />
+            </label>
             <PrefsSummary profile={profile} />
-            <p className="text-[12px] text-muted">Tip: add estimates like “~30m” when you create tasks — plans get much more realistic.</p>
+            <p className="text-[12px] text-muted">
+              Each task gets the time it really needs: your estimate if you gave one, how long similar tasks took you before, or the AI&apos;s judgement from
+              the title.
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -134,18 +180,25 @@ export function PlanDay() {
               </div>
             ) : null}
             <ol className="relative space-y-2 border-l border-line pl-4">
-              {plan.blocks.map((b) => (
-                <li key={b.task_id} className="relative">
-                  <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-accent" />
-                  <div className="flex items-baseline gap-2">
-                    <span className="w-[92px] shrink-0 font-mono text-[12px] tabular-nums text-muted">
-                      {formatTime(b.start)}–{formatTime(b.end)}
-                    </span>
-                    <span className="text-[13.5px] text-fg">{byId.get(b.task_id)?.title ?? "Task"}</span>
-                  </div>
-                  {b.note ? <div className="ml-[100px] text-[12px] text-faint">{b.note}</div> : null}
-                </li>
-              ))}
+              {plan.blocks.map((b) => {
+                const len = Math.max(0, toMin(b.end) - toMin(b.start));
+                return (
+                  <li key={b.task_id} className="relative">
+                    <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-accent" />
+                    <div className="flex items-baseline gap-2">
+                      <span className="w-[118px] shrink-0 whitespace-nowrap font-mono text-[11.5px] tabular-nums text-muted">
+                        {formatTime(b.start)}–{formatTime(b.end)}
+                      </span>
+                      <span className="min-w-0 flex-1 text-[13.5px] text-fg">{byId.get(b.task_id)?.title ?? "Task"}</span>
+                      <span className="shrink-0 font-mono text-[11.5px] tabular-nums text-faint">
+                        {fmtMin(len)}
+                        {b.estimate_min && b.estimate_min > len + 5 ? ` of ${fmtMin(b.estimate_min)}` : ""}
+                      </span>
+                    </div>
+                    {b.note ? <div className="ml-[126px] text-[12px] text-faint">{b.note}</div> : null}
+                  </li>
+                );
+              })}
             </ol>
             {plan.defer.length ? (
               <div className="rounded-lg border border-warning/25 bg-warning/8 p-3 text-[12.5px]">
@@ -161,7 +214,43 @@ export function PlanDay() {
                 </ul>
               </div>
             ) : null}
-            {plan.tips.length ? <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-muted">{plan.tips.map((t, i) => <li key={i}>{t}</li>)}</ul> : null}
+            {plan.tips.length ? (
+              <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-muted">
+                {plan.tips.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            ) : null}
+            {plan.memory?.length ? (
+              <div className="flex items-start gap-2 text-[12px] text-muted">
+                <Brain className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                <span>
+                  Used {plan.memory.length} thing
+                  {plan.memory.length > 1 ? "s" : ""} it knows about how you work.{" "}
+                  <Link href="/settings#memory" className="text-accent hover:underline" onClick={() => setOpen(false)}>
+                    See what it knows
+                  </Link>
+                </span>
+              </div>
+            ) : null}
+            <form
+              className="flex gap-2 border-t border-line pt-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (change.trim()) generate(change);
+              }}
+            >
+              <Input
+                value={change}
+                onChange={(e) => setChange(e.target.value)}
+                placeholder="Change something — “Azure needs 2h”, “start at 4”, “reading tonight”"
+                aria-label="Tell the planner what to change"
+                maxLength={500}
+              />
+              <Button type="submit" variant="secondary" loading={loading} disabled={!change.trim()}>
+                <RefreshCw className="h-3.5 w-3.5" /> Update
+              </Button>
+            </form>
           </div>
         )}
       </Dialog>
@@ -169,10 +258,16 @@ export function PlanDay() {
   );
 }
 
+const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m}m`);
+
 function PrefsSummary({ profile }: { profile: ReturnType<typeof useProfile>["data"] }) {
   const p = profile?.planning ?? {};
   const routines = p.routines ?? [];
-  const bits = [p.wake ? `up ${formatTime(p.wake)}` : null, p.sleep ? `bed ${formatTime(p.sleep)}` : null, p.work ? `work ${formatTime(p.work.start)}–${formatTime(p.work.end)}` : null]
+  const bits = [
+    p.wake ? `up ${formatTime(p.wake)}` : null,
+    p.sleep ? `bed ${formatTime(p.sleep)}` : null,
+    p.work ? `work ${formatTime(p.work.start)}–${formatTime(p.work.end)}` : null,
+  ]
     .filter(Boolean)
     .join(" · ");
   return (

@@ -10,6 +10,8 @@ export type Task = {
   notes: string | null;
   due_date: string | null;
   due_time: string | null;
+  /** The time "Plan my day" gave it; while due_time equals this, a new plan may move it. */
+  planned_time?: string | null;
   priority: 1 | 2 | 3 | 4;
   tags: string[];
   status: "todo" | "done" | "dropped";
@@ -77,6 +79,9 @@ export type Profile = {
   share_progress: boolean;
   /** How you like your day to run — Plan my day follows it. */
   planning: import("@/lib/planning").PlanningPrefs;
+  /** Learn preferences from activity and what you tell the AI (Settings → What the AI knows). */
+  memory_learning?: boolean;
+  memory_learned_at?: string | null;
   health: import("@/lib/health").HealthSettings;
 };
 
@@ -338,7 +343,8 @@ export type Interest = {
 export type MemoryQuestion = {
   id: string;
   interest_id: string | null;
-  kind: "confirm_interest" | "job_use" | "exclude_term";
+  kind: "confirm_interest" | "job_use" | "exclude_term" | "confirm_fact" | "fact_routine";
+  fact_id?: string | null;
   question: string;
   detail: string | null;
   term: string | null;

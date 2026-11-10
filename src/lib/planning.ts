@@ -205,3 +205,74 @@ export function suggestTime(task: TaskLike, prefs: PlanningPrefs | null | undefi
   const r = matchRoutine(task, prefs?.routines ?? [], weekday);
   return r ? { time: r.start, routine: r } : null;
 }
+
+// ---------------------------------------------------------------------------
+// Durations and re-planning
+// ---------------------------------------------------------------------------
+
+/** A time "Plan my day" set (and you haven't changed since) can be moved by the next plan. */
+export function isPlanOwned(t: { due_time?: string | null; planned_time?: string | null }): boolean {
+  return !!t.due_time && !!t.planned_time && t.due_time.slice(0, 5) === t.planned_time.slice(0, 5);
+}
+
+const WORD_STOP = new Set("the a an and or to of for in on at with my do get finish start task tasks day days today tomorrow".split(" "));
+const words = (title: string, tags?: string[] | null) =>
+  new Set([
+    ...title
+      .toLowerCase()
+      .split(/[^a-z0-9+#]+/)
+      .filter((w) => w.length > 2 && !WORD_STOP.has(w) && !/^\d+$/.test(w)),
+    ...(tags ?? []).map((t) => `#${t.toLowerCase()}`),
+  ]);
+
+/**
+ * How long tasks like this one took you before (median of finished tasks with
+ * recorded time whose titles overlap enough), or null without enough history.
+ */
+export function typicalMinutes(task: TaskLike, history: (TaskLike & { actual_minutes?: number | null })[]): { minutes: number; samples: number } | null {
+  const mine = words(task.title, task.tags);
+  if (!mine.size) return null;
+  const title = task.title.trim().toLowerCase();
+  const similar = history.filter((h) => {
+    if (!h.actual_minutes || h.actual_minutes <= 0) return false;
+    if (h.title.trim().toLowerCase() === title) return true;
+    const theirs = words(h.title, h.tags);
+    const shared = [...mine].filter((w) => theirs.has(w)).length;
+    return shared >= 1 && shared / new Set([...mine, ...theirs]).size >= 0.34;
+  });
+  const exact = similar.some((h) => h.title.trim().toLowerCase() === title);
+  if (similar.length < 2 && !exact) return null;
+  const sorted = similar.map((h) => h.actual_minutes!).sort((a, b) => a - b);
+  return {
+    minutes: sorted[Math.floor(sorted.length / 2)],
+    samples: similar.length,
+  };
+}
+
+/** The first sensible start: a few minutes from now, on a 5-minute mark. */
+export function earliestStart(now: string, bufferMin = 5): string {
+  return toTime(Math.ceil((toMin(now) + bufferMin) / 5) * 5);
+}
+
+/**
+ * Keeps blocks in order without overlaps and not before `earliest`, keeping each
+ * block's length. Fixed-time tasks stay exactly where they are.
+ */
+export function settleBlocks(blocks: PlanBlock[], fixed: Set<string>, earliest: string): PlanBlock[] {
+  const sorted = [...blocks].sort((a, b) => toMin(a.start) - toMin(b.start));
+  const out: PlanBlock[] = [];
+  let cursor = toMin(earliest);
+  for (const b of sorted) {
+    const s = toMin(b.start);
+    const len = Math.max(5, toMin(b.end) - s);
+    if (fixed.has(b.task_id)) {
+      out.push(b);
+      cursor = Math.max(cursor, s + len);
+      continue;
+    }
+    const start = Math.max(s, cursor);
+    out.push({ ...b, start: toTime(start), end: toTime(start + len) });
+    cursor = start + len;
+  }
+  return out;
+}

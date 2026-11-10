@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, Briefcase, CalendarClock, CalendarDays, Download, HeartHandshake, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
+import { BellRing, Brain, Briefcase, CalendarClock, CalendarDays, Download, HeartHandshake, LogOut, Mail, Monitor, Moon, Palette, Plug, Settings, Smartphone, Sun, Trash2, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { api, timeAgo } from "@/lib/utils";
 import { CalendarFeed } from "./calendar-feed";
 import { GmailCard } from "./gmail-card";
 import { IntegrationStatus } from "./integration-status";
+import { MemoryCard } from "./memory-card";
 import { PlanningPrefsCard } from "./planning-prefs";
 
 function Section({ id, title, icon, children, description }: { id: string; title: string; icon: React.ReactNode; children: React.ReactNode; description?: string }) {
@@ -261,6 +262,15 @@ export function SettingsView() {
           description="How you like your day to run. Plan my day and time suggestions follow these — e.g. reading always at night."
         >
           <PlanningPrefsCard profile={profile} />
+        </Section>
+
+        <Section
+          id="memory"
+          title="What the AI knows about you"
+          icon={<Brain className="h-4 w-4" />}
+          description="How you like to work, what you like and what you believe in. The AI uses this when it plans your day, suggests what to learn and interviews you for jobs. It keeps learning; you can edit, pin or remove anything."
+        >
+          <MemoryCard profile={profile} />
         </Section>
 
         <Section id="notifications" title="Notifications" icon={<BellRing className="h-4 w-4" />} description="Times for the morning brief, end-of-day review and learning nudge live on the Reminders page.">

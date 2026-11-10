@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { chatJson } from "@/lib/ai/llm";
 import type { JobProfile } from "@/lib/jobs/types";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { addRoutine } from "./personal";
 import {
   computeStrength,
   heuristicRelevance,
@@ -304,6 +305,21 @@ export async function answerQuestion(
   } else if (q.kind === "job_use" && q.interest_id) {
     await supabase.from("interests").update({ job_use: answer === "yes" ? "always" : "never" }).eq("id", q.interest_id);
     message = answer === "yes" ? "Scout will look for roles that use it." : "Scout won't use it for jobs.";
+  } else if (q.kind === "confirm_fact" && q.fact_id) {
+    const { data: f } = await supabase.from("user_facts").select("id, confidence, routine").eq("id", q.fact_id).maybeSingle();
+    if (f && answer === "yes") {
+      await supabase.from("user_facts").update({ status: "active", confidence: Math.max(f.confidence as number, 85), last_seen_at: new Date().toISOString() }).eq("id", f.id);
+      const routine = f.routine ? await addRoutine(supabase, userId, f.routine) : false;
+      message = routine ? "Saved — and Plan my day now keeps that time for it." : "Saved — the AI will plan with that in mind.";
+    } else if (f) {
+      await supabase.from("user_facts").update({ status: "rejected" }).eq("id", f.id);
+      message = "Got it — I won't assume that.";
+    }
+  } else if (q.kind === "fact_routine" && q.fact_id) {
+    if (answer === "yes") {
+      const { data: f } = await supabase.from("user_facts").select("routine").eq("id", q.fact_id).maybeSingle();
+      message = f?.routine && (await addRoutine(supabase, userId, f.routine)) ? "Added to your routines — Plan my day follows it now." : "Couldn't add that routine.";
+    } else message = "OK — it stays a soft preference, not a fixed time.";
   } else if (q.kind === "exclude_term" && q.term && answer === "yes") {
     const { data: jp } = await supabase.from("job_profiles").select("profile").eq("user_id", userId).maybeSingle();
     const profile = (jp?.profile ?? {}) as JobProfile;

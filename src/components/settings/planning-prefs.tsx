@@ -73,6 +73,7 @@ export function PlanningPrefsCard({ profile }: { profile: Profile }) {
       setDraft(r.planning);
       setSentence("");
       toast.success(r.summary);
+      qc.invalidateQueries({ queryKey: ["user-facts"] });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -83,7 +84,8 @@ export function PlanningPrefsCard({ profile }: { profile: Profile }) {
   return (
     <Card className="space-y-5 p-4">
       <div>
-        <div className="mb-1.5 text-[13.5px] text-fg">Tell it in your own words</div>
+        <div className="text-[13.5px] text-fg">Tell it in your own words</div>
+        <p className="mb-1.5 text-[12px] text-muted">Times become routines below; likes, beliefs, goals and how you work go to “What the AI knows about you”.</p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -91,7 +93,7 @@ export function PlanningPrefsCard({ profile }: { profile: Profile }) {
           }}
           className="flex flex-col gap-2 sm:flex-row"
         >
-          <Input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="e.g. I read after 10:30 PM and journal before bed" maxLength={500} aria-label="Describe a preference" />
+          <Input value={sentence} onChange={(e) => setSentence(e.target.value)} placeholder="e.g. I read after 10:30 PM · I hate meetings before 10 · family time matters most on Sundays" maxLength={500} aria-label="Describe a preference" />
           <Button type="submit" variant="secondary" loading={learning} disabled={sentence.trim().length < 3}>
             <Sparkles className="h-4 w-4" /> Remember
           </Button>

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { handle, HttpError, requireUser } from "@/lib/auth";
+import { memoryContext, noteForMemory } from "@/lib/memory/personal";
 import { mergeProfile, onboardingTurn, type OnboardingTurn } from "@/lib/jobs/profile";
 import type { JobProfile } from "@/lib/jobs/types";
 
@@ -26,12 +27,14 @@ export async function POST(request: Request) {
 
     if (parsed.data.message?.trim()) {
       chat = [...chat, { role: "user", content: parsed.data.message.trim(), at: now }];
+      void noteForMemory(supabase, user.id, "scout-chat", parsed.data.message);
     }
 
     const turn = await onboardingTurn({
       history: chat.map(({ role, content }) => ({ role, content })),
       profile,
       resumeText: row?.resume_text,
+      memory: await memoryContext(supabase, user.id, "jobs", 12),
     });
     const nextProfile = mergeProfile(profile, turn.profile_patch);
     chat = [

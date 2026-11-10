@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { embed, jobEmbeddingText, toPgVector } from "@/lib/ai/embeddings";
 import { handle, HttpError, requireUser } from "@/lib/auth";
+import { noteForMemory } from "@/lib/memory/personal";
 import type { Profile } from "@/lib/cron/tick";
 import { discoverBoard } from "@/lib/jobs/discover";
 import { runJobSearch } from "@/lib/jobs/pipeline";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
     ]);
     if (!me) throw new HttpError(404, "Profile not found");
     const profile = (jp?.profile as JobProfile) ?? {};
+    void noteForMemory(supabase, user.id, "job-search", query);
     const plan = await parseJobQuery(query, profile);
 
     const { data: search, error } = await supabase.from("searches").insert({ query, plan }).select("*").single();
