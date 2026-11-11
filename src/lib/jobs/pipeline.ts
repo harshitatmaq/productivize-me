@@ -302,7 +302,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
 
     const preferences = [await feedbackContext(admin, userId), interestContext(interests)].filter(Boolean).join("\n") || undefined;
     const vectorFor = new Map(ranked.map((c) => [c.job.url, c]));
-    const { scored, dropped, providers } = await scoreJobs(profile, ranked, log, 8, preferences);
+    const { scored, dropped, providers } = await scoreJobs(profile, ranked, log, Number(process.env.JOBS_SCORE_BATCH ?? 5) || 5, preferences);
     stats.scored = scored.length;
     stats.dropped = dropped;
     stats.providers = providers;

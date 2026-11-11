@@ -1,5 +1,5 @@
 import { extractJson } from "./json";
-import { isConfigured, orderedProviders, type ProviderDef } from "./providers";
+import { isConfigured, noPersonalData, orderedProviders, stepsFor, type ProviderDef } from "./providers";
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -52,8 +52,41 @@ class ProviderError extends Error {
   }
 }
 
-/** provider:model -> epoch ms until which it is skipped (after a 429/5xx). */
+/** provider:model -> epoch ms until which it is skipped (after a 429/5xx, a daily limit or a retired model). */
 const cooldowns = new Map<string, number>();
+/** Models that no longer exist, logged once per process. */
+const retired = new Set<string>();
+
+/** Tasks that only handle public text; everything else may contain personal data. */
+const PUBLIC_PURPOSES = new Set(["job-import", "job-query"]);
+
+const MIN = 60_000;
+const nextUtcMidnight = (now = Date.now()) => {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) + 30_000;
+};
+
+/** What a failure means for this provider/model: how long to skip it. */
+export function classifyFailure(status: number | undefined, message: string, retryAfterMs?: number, now = Date.now()): { until: number; kind: "minute" | "daily" | "retired" | "outage" | "auth" | "other" } {
+  const msg = message.toLowerCase();
+  if (status === 404 || ((status === 400 || status === 422) && /model[_ ]not[_ ]found|model .*(not found|does not exist|not exist|not available|decommission|deprecat|no longer|unsupported)|unknown model|invalid model|no such model/.test(msg))) {
+    return { until: now + 6 * 60 * MIN, kind: "retired" };
+  }
+  if (status === 429) {
+    const daily = /per day|per-day|daily|\brpd\b|\btpd\b|requests per day|tokens per day|quota exceeded|free-models-per-day/.test(msg) || (retryAfterMs ?? 0) > 10 * MIN;
+    if (daily) return { until: Math.max(now + (retryAfterMs ?? 0), nextUtcMidnight(now)), kind: "daily" };
+    return { until: now + (retryAfterMs ?? MIN), kind: "minute" };
+  }
+  if (status === 401 || status === 403) return { until: now + 10 * MIN, kind: "auth" };
+  if (status && status >= 500) return { until: now + 20_000, kind: "outage" };
+  return { until: 0, kind: "other" };
+}
+
+/** Rough token count (≈3.5 characters per token) of a request including its output budget. */
+export function estimateTokens(opts: Pick<ChatOptions, "messages" | "maxTokens" | "tools">): number {
+  const chars = opts.messages.reduce((n, m) => n + m.content.length, 0) + (opts.tools?.length ? JSON.stringify(opts.tools).length : 0);
+  return Math.ceil(chars / 3.5) + (opts.maxTokens ?? 2048);
+}
 
 type FetchLike = typeof fetch;
 let fetchImpl: FetchLike = (...args) => fetch(...args);
@@ -63,6 +96,7 @@ let usageRecorder: ((provider: string) => void) | null = null;
 export function __setFetch(f: FetchLike | null) {
   fetchImpl = f ?? ((...args) => fetch(...args));
   cooldowns.clear();
+  retired.clear();
 }
 
 /** Lets server code count calls per provider without a hard dependency here. */
@@ -73,9 +107,10 @@ export function setUsageRecorder(fn: ((provider: string) => void) | null) {
 function parseRetryAfter(h: string | null): number | undefined {
   if (!h) return undefined;
   const secs = Number(h);
-  if (Number.isFinite(secs)) return Math.min(secs * 1000, 120_000);
+  // Daily limits can ask for hours; cap at a day.
+  if (Number.isFinite(secs)) return Math.min(secs * 1000, 26 * 60 * MIN);
   const at = Date.parse(h);
-  return Number.isFinite(at) ? Math.min(Math.max(at - Date.now(), 0), 120_000) : undefined;
+  return Number.isFinite(at) ? Math.min(Math.max(at - Date.now(), 0), 26 * 60 * MIN) : undefined;
 }
 
 async function callProvider(
@@ -161,52 +196,75 @@ async function callProvider(
 export async function chat(opts: ChatOptions, validate?: (text: string) => void): Promise<ChatResult> {
   const attempts: Attempt[] = [];
   const deadline = Date.now() + (opts.deadlineMs ?? 240_000);
-  const providers = orderedProviders().filter(
-    (p) => isConfigured(p) && (!opts.only || opts.only.includes(p.id)),
+  const blocked = opts.purpose && PUBLIC_PURPOSES.has(opts.purpose) ? new Set<string>() : noPersonalData();
+  const steps = stepsFor(opts.purpose).filter(
+    (s) => isConfigured(s.provider) && (!opts.only || opts.only.includes(s.provider.id)) && !blocked.has(s.provider.id),
   );
 
-  if (providers.length === 0) {
+  if (steps.length === 0) {
     throw new LlmChainError(
       "No LLM provider is configured. Add at least one API key (e.g. GROQ_API_KEY) to the environment.",
       attempts,
     );
   }
 
-  for (const p of providers) {
-    for (const model of p.models) {
-      const key = `${p.id}:${model}`;
-      const until = cooldowns.get(key) ?? 0;
-      if (until > Date.now()) {
-        attempts.push({ provider: p.id, model, ok: false, ms: 0, error: "cooling down after rate limit" });
-        continue;
-      }
-      const remaining = deadline - Date.now();
-      if (remaining < 3_000) {
-        throw new LlmChainError("LLM chain ran out of time", attempts);
-      }
-      const started = Date.now();
+  const size = estimateTokens(opts);
+  const badKey = new Set<string>();
+  for (const { provider: p, model } of steps) {
+    const key = `${p.id}:${model}`;
+    if (badKey.has(p.id)) continue;
+    const until = cooldowns.get(key) ?? 0;
+    if (until > Date.now()) {
+      attempts.push({ provider: p.id, model, ok: false, ms: 0, error: retired.has(key) ? "model not available" : "cooling down after rate limit" });
+      continue;
+    }
+    if (p.maxRequestTokens > 0 && size > p.maxRequestTokens) {
+      attempts.push({ provider: p.id, model, ok: false, ms: 0, error: `request too large for this provider (~${size} tokens)` });
+      continue;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining < 3_000) {
+      throw new LlmChainError("LLM chain ran out of time", attempts);
+    }
+    const started = Date.now();
+    try {
+      const out = await callProvider(p, model, opts, Math.min(p.timeoutMs, remaining));
+      let text = out.content;
       try {
-        const out = await callProvider(p, model, opts, Math.min(p.timeoutMs, remaining));
-        const text = out.content;
         validate?.(text);
-        attempts.push({ provider: p.id, model, ok: true, ms: Date.now() - started });
-        usageRecorder?.(p.id);
-        return { text, provider: p.id, model, attempts, toolCalls: out.toolCalls, finishReason: out.finishReason };
-      } catch (e) {
-        const err = e as ProviderError;
-        attempts.push({ provider: p.id, model, ok: false, ms: Date.now() - started, error: err.message });
-        if (err.status === 429) {
-          cooldowns.set(key, Date.now() + (err.retryAfterMs ?? 60_000));
-        } else if (err.status && err.status >= 500) {
-          cooldowns.set(key, Date.now() + 20_000);
-        } else if (err.status === 401 || err.status === 403) {
-          // Bad key: no point trying the other models of this provider.
-          cooldowns.set(key, Date.now() + 10 * 60_000);
-          break;
-        }
-        if (opts.purpose) {
-          console.warn(`[llm:${opts.purpose}] ${p.id}/${model} failed: ${err.message}`);
-        }
+      } catch (invalid) {
+        // One repair attempt on the same model before moving on: show it its reply and the parse error.
+        if (!opts.json || opts.tools?.length || deadline - Date.now() < 5_000) throw invalid;
+        const repaired = await callProvider(
+          p,
+          model,
+          {
+            ...opts,
+            messages: [
+              ...opts.messages,
+              { role: "assistant", content: text.slice(0, 8000) },
+              { role: "user", content: `That reply wasn't valid (${(invalid as Error).message.slice(0, 200)}). Reply again with ONLY the corrected JSON, nothing else.` },
+            ],
+          },
+          Math.min(p.timeoutMs, deadline - Date.now()),
+        );
+        text = repaired.content;
+        validate?.(text);
+      }
+      attempts.push({ provider: p.id, model, ok: true, ms: Date.now() - started });
+      usageRecorder?.(p.id);
+      return { text, provider: p.id, model, attempts, toolCalls: out.toolCalls, finishReason: out.finishReason };
+    } catch (e) {
+      const err = e as ProviderError;
+      attempts.push({ provider: p.id, model, ok: false, ms: Date.now() - started, error: err.message });
+      const verdict = classifyFailure(err.status, err.message ?? "", err.retryAfterMs);
+      if (verdict.until) cooldowns.set(key, verdict.until);
+      if (verdict.kind === "auth") badKey.add(p.id); // bad key: no point trying this provider's other models
+      if (verdict.kind === "retired" && !retired.has(key)) {
+        retired.add(key);
+        console.error(`[llm] ${key} is not available (retired or wrong id) — skipping it. Run \`npm run ai:check\` and update ${p.modelsEnv}.`);
+      } else if (opts.purpose) {
+        console.warn(`[llm:${opts.purpose}] ${p.id}/${model} failed${verdict.kind === "daily" ? " (daily limit — skipped until it resets)" : ""}: ${err.message}`);
       }
     }
   }
