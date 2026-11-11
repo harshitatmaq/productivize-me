@@ -46,7 +46,7 @@ export async function scoreJobs(
   profile: JobProfile,
   jobs: { job: RawJob; rel: number }[],
   log: (m: string) => void,
-  batchSize = 8,
+  batchSize = 5,
   preferences?: string,
 ): Promise<{ scored: ScoredJob[]; dropped: number; providers: string[] }> {
   const brief = candidateBrief(profile);
@@ -87,7 +87,7 @@ export async function scoreJobs(
             },
           ],
           temperature: 0.1,
-          maxTokens: 2600,
+          maxTokens: 1900,
           purpose: "job-scoring",
           deadlineMs: 120_000,
         },
