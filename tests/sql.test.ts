@@ -349,3 +349,15 @@ describe("personal memory", () => {
     await db.exec(`reset role`);
   });
 });
+
+describe("AI activity log table", () => {
+  it("exists and is not readable by signed-in users", async () => {
+    await db.exec(`reset role`);
+    await db.exec(`insert into public.ai_calls (purpose, provider, model, ok, ms) values ('plan-day', 'groq', 'm', true, 900)`);
+    await asUser(u1);
+    await db.exec(`set role authenticated`);
+    await expect(db.query(`select * from public.ai_calls`)).rejects.toThrow();
+    await db.exec(`reset role`);
+  });
+});
+

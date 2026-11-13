@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { extractJson } from "@/lib/ai/json";
-import { __setFetch, chat, chatJson, classifyFailure, LlmChainError } from "@/lib/ai/llm";
+import { __setCallRecorder, __setFetch, chat, chatJson, classifyFailure, LlmChainError } from "@/lib/ai/llm";
 
 const ENV_KEYS = ["GROQ_API_KEY", "CEREBRAS_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "MISTRAL_API_KEY", "MAQ_AI_API_KEY", "MAQ_AI_BASE_URL", "MAQ_AI_MODELS", "LLM_PROVIDER_ORDER", "GROQ_MODELS", "GEMINI_MODELS", "NVIDIA_API_KEY", "CLOUDFLARE_API_KEY", "CLOUDFLARE_ACCOUNT_ID", "LLM_PURPOSE_LANES", "LLM_LANE_QUICK", "LLM_PURPOSE_FIRST", "LLM_NO_PERSONAL_DATA", "GROQ_MAX_REQUEST_TOKENS"];
 const saved: Record<string, string | undefined> = {};
@@ -214,5 +214,28 @@ describe("smarter fallback", () => {
     // a provider left out of LLM_PROVIDER_ORDER stays out of lanes
     process.env.LLM_PROVIDER_ORDER = "groq";
     expect(await order("resume")).toEqual(["groq:openai/gpt-oss-120b", "groq:openai/gpt-oss-20b"]);
+  });
+});
+
+describe("AI activity log", () => {
+  it("records which model answered, how many failed first, and total failures — never the prompt", async () => {
+    process.env.GROQ_API_KEY = "g";
+    process.env.GROQ_MODELS = "busy,ok";
+    const rows: Record<string, unknown>[] = [];
+    __setCallRecorder((r) => {
+      rows.push(r);
+    });
+    __setFetch(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      return body.model === "busy" ? reply("slow down", 429) : reply("fine");
+    });
+    await chat({ messages: [{ role: "user", content: "secret plans" }], purpose: "plan-day" });
+    expect(rows[0]).toMatchObject({ purpose: "plan-day", provider: "groq", model: "ok", ok: true, fallbacks: 1 });
+    expect(JSON.stringify(rows)).not.toContain("secret plans");
+
+    __setFetch(async () => reply("down", 503));
+    await expect(chat({ messages: [{ role: "user", content: "x" }], purpose: "flashcards" })).rejects.toBeInstanceOf(LlmChainError);
+    expect(rows[1]).toMatchObject({ purpose: "flashcards", ok: false });
+    __setCallRecorder(null);
   });
 });

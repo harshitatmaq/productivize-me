@@ -17,6 +17,7 @@ import { api, timeAgo } from "@/lib/utils";
 import { CalendarFeed } from "./calendar-feed";
 import { GmailCard } from "./gmail-card";
 import { IntegrationStatus } from "./integration-status";
+import { AiActivityCard } from "./ai-activity";
 import { MemoryCard } from "./memory-card";
 import { PlanningPrefsCard } from "./planning-prefs";
 
@@ -342,7 +343,22 @@ export function SettingsView() {
         </Section>
 
         <Section id="integrations" title="Integrations" icon={<Plug className="h-4 w-4" />} description="API keys live in the server environment (never in the browser). Anything unticked is skipped automatically.">
-          <IntegrationStatus />
+          <div className="space-y-4">
+            <AiActivityCard />
+            <IntegrationStatus />
+          </div>
+        </Section>
+
+        <Section id="data" title="Your data" icon={<Download className="h-4 w-4" />} description="Everything you add is stored in your Supabase database; updating the app never removes it.">
+          <Card className="flex flex-wrap items-center gap-3 p-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13.5px] text-fg">Export my data</div>
+              <div className="text-[12px] text-muted">One JSON file with your tasks, learning, flashcards, jobs, interests, health, preferences, memories, and what you wrote in shared dashboards.</div>
+            </div>
+            <a href="/api/export" download className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-[13px] font-medium text-fg hover:bg-panel-hover">
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+          </Card>
         </Section>
 
         <Section id="appearance" title="Appearance" icon={<Palette className="h-4 w-4" />}>

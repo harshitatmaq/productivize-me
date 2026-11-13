@@ -10,6 +10,8 @@
 --            colours, private chat-images bucket, Realtime
 --   Part 3 · Personal memory (what the AI learns about how you work, what you
 --            like and believe) + re-plannable "Plan my day" times
+--   Part 4 · AI activity log (which model answered each AI task, how fast,
+--            and why calls failed; no prompt content is stored)
 -- =============================================================================
 
 -- #############################################################################
@@ -598,3 +600,25 @@ $$;
 
 grant select, insert, update, delete on public.user_facts, public.memory_inbox to authenticated;
 grant all on public.user_facts, public.memory_inbox to service_role;
+
+-- #############################################################################
+-- Part 4 · AI activity log
+-- #############################################################################
+
+-- One row per AI request: the task, which provider/model answered (or that all
+-- failed), how long it took, how many models failed first, and the last error.
+-- No prompts or replies are stored. Kept for 30 days. Server-only (no policies).
+create table if not exists public.ai_calls (
+  id bigint generated always as identity primary key,
+  purpose text,
+  provider text,
+  model text,
+  ok boolean not null,
+  ms integer not null default 0,
+  fallbacks smallint not null default 0,
+  error text check (char_length(error) <= 400),
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_calls_created_idx on public.ai_calls (created_at desc);
+alter table public.ai_calls enable row level security;
+grant all on public.ai_calls to service_role;

@@ -102,6 +102,15 @@ export async function runTick(now = new Date()) {
   } catch (e) {
     console.warn("[tick] preference learning skipped:", (e as Error).message);
   }
+  // Housekeeping: the AI activity log keeps 30 days.
+  await admin
+    .from("ai_calls")
+    .delete()
+    .lt("created_at", new Date(now.getTime() - 30 * 86_400_000).toISOString())
+    .then(
+      () => {},
+      () => {},
+    );
   // Housekeeping: keep the in-app inbox small.
   await admin
     .from("notifications")
