@@ -27,7 +27,7 @@ export function gmailLabel() {
 
 export type GmailBatch = {
   jobs: RawJob[];
-  emails: { messageId: string; kind: "alert" | "reply" | "other"; from: string; subject: string; date: string | null; jobs: number }[];
+  emails: { messageId: string; kind: "alert" | "reply" | "other"; from: string; subject: string; date: string | null; jobs: number; /** Replies only: the start of the text, for status updates. */ text?: string }[];
   lastUid: number;
   uidValidity: string;
 };
@@ -68,6 +68,7 @@ export async function readGmailLabel(email: string, appPassword: string, state: 
         subject: subject.slice(0, 300),
         date: parsed.date ? parsed.date.toISOString() : null,
         jobs: jobs.length,
+        text: kind === "reply" ? (parsed.text ?? "").replace(/\s+/g, " ").slice(0, 3000) : undefined,
       });
       out.lastUid = Math.max(out.lastUid, uid);
     }

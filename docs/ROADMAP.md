@@ -27,6 +27,8 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 16 | Identity colours | Each member picks a colour **per dashboard**; no two members can share one (database-enforced). It colours their messages, board items, shared-feed cards and avatars **only inside Together**; the rest of the app keeps its theme |
 | 17 | Personal memory | The AI keeps a list of short facts about you (timing, habits, how you work, likes, dislikes, beliefs, goals, life) with confidence and evidence. Your own words are used at once; learned patterns need ≥75 confidence or your yes (asked on Today, max 2 a day); they strengthen when seen again and fade when not. Learned time windows become hard routines only after you confirm. Used by Plan my day, learning suggestions and the Scout interview; never shared |
 | 18 | Plan my day | Real durations (your estimate → your history → AI judgement), start a few minutes from now, re-plan any time with a typed change; times a plan set stay movable until you change them |
+| 19 | Applications | No auto-submit and no extension yet: the app prepares answers (bank → profile → AI drafts for open questions only, "needs you" for facts) and the user submits. Reply emails update status by rules, never via AI |
+| 20 | Learning map | After phase 3: a light "connect the dots" layer on existing learning data, not a tutor (LearnHarness covers deep tutoring) |
 
 ---
 
@@ -223,7 +225,8 @@ All background AI work goes through **one Supabase queue** (`agent_jobs`): type,
 
 1. ✅ **Worker + queue + sources**: JobSpy, career sites, Gmail label; live-streaming feed; Search & ask Scout page.
 2. ✅ **Career memory + Interests + sharing**: Interests page (what Scout knows), check-in questions, job relevance feeding search and scoring; shared dashboards with email invites, Share to… everywhere, shared lists; icon labels.
-3. **Applications**: answer bank, save → prepare, Apply sheet, full applied-jobs record, email status updates.
+3. ✅ **Applications** (without the extension): answer bank, Prepare application (Greenhouse forms read exactly, common questions elsewhere, AI drafts for open questions, "needs you" for facts), Apply sheet with copy buttons, Mark applied (snapshot + answer bank learning + follow-up), application history, email status updates by rules.
+3b. **Learning map** (after phase 3, decided Nov 2026): link each learning entry to related topics with one small AI call, a topic map in Learning coloured by strength (minutes + flashcard recall), and "learn next" from job skill gaps. Deep tutoring stays in LearnHarness.
 4. **Stretch prompts** + paste-back resume versions.
 5. **Edge/Chrome extension** (Greenhouse, Lever, Ashby → Workday).
 6. **02:00 IST MAQ batch** + animation polish.

@@ -6,6 +6,7 @@ import { paceAllows, recordCall } from "@/lib/usage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { CAREER_OPS_BOARDS } from "./company-seed";
 import { gmailAccounts, readGmailLabel } from "./gmail";
+import { applyReplies } from "./replies";
 import { countryForIndeed, jobspySites, mapJobspyRecord, runJobspy } from "./jobspy";
 import { domainOf, formatSalary, looksLikeListingPage, stripHtml, titleScore } from "./normalize";
 import type { RawJob, SearchPlan, WatchCompany, WebQuery } from "./types";
@@ -861,6 +862,8 @@ const gmail: JobSource = {
           { onConflict: "user_id,message_id", ignoreDuplicates: true },
         );
       log(`gmail: ${batch.emails.length} new emails, ${batch.jobs.length} job links`);
+      const replies = batch.emails.filter((e) => e.kind === "reply");
+      if (replies.length) await applyReplies(userId, replies, log).catch((e) => log(`gmail: reply updates skipped: ${(e as Error).message}`));
     }
     return batch.jobs;
   },
