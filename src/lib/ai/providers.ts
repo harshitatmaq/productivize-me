@@ -198,6 +198,7 @@ const PURPOSE_LANES: Record<string, string> = {
   "profile-synthesis": "writing",
   "search-plan": "writing",
   "job-analysis": "writing",
+  "application-pack": "writing",
   resume: "writing",
   portfolio: "writing",
   "learning-suggest": "writing",

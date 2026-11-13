@@ -361,3 +361,24 @@ describe("AI activity log table", () => {
   });
 });
 
+describe("applications", () => {
+  it("keeps the answer bank and applications private, one answer per question", async () => {
+    await db.exec(`reset role`);
+    await asUser(u1);
+    await db.exec(`set role authenticated`);
+    const job = await one<{ id: string }>(`insert into public.jobs (url, url_hash, dedupe_key, title) values ('https://x.com/j', 'h-apply', 'd-apply', 'Data Engineer') returning id`);
+    await db.exec(`insert into public.answer_bank (key, question, answer, category) values ('phone', 'Phone number', '+91 9', 'contact')`);
+    await db.exec(`insert into public.answer_bank (key, question, answer, category) values ('phone', 'Phone number', '+91 8', 'contact') on conflict (user_id, key) do update set answer = excluded.answer`);
+    expect((await one<{ answer: string }>(`select answer from public.answer_bank where key = 'phone'`)).answer).toBe("+91 8");
+    await db.exec(`insert into public.applications (job_id, form_source, fields) values ('${job.id}', 'greenhouse', '[{"id":"f","label":"Phone","answer":"+91 8"}]')`);
+    await expect(db.exec(`insert into public.answer_bank (key, question, category) values ('x', 'y', 'astrology')`)).rejects.toThrow();
+
+    await db.exec(`reset role`);
+    await asUser(u2);
+    await db.exec(`set role authenticated`);
+    expect((await db.query(`select * from public.answer_bank`)).rows).toHaveLength(0);
+    expect((await db.query(`select * from public.applications`)).rows).toHaveLength(0);
+    await db.exec(`reset role`);
+  });
+});
+

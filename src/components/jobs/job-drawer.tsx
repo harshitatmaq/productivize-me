@@ -16,6 +16,7 @@ import { api, cn, timeAgo } from "@/lib/utils";
 import type { JobAnalysis } from "@/lib/jobs/types";
 import { CompanyLogo, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
+import { ApplyPanel } from "./apply-panel";
 import { ResumeButton } from "./resume-pdf";
 
 function CopyButton({ text }: { text: string }) {
@@ -49,7 +50,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
   const update = useUpdateJob();
   const del = useDeleteJob();
   const id = job?.id ?? null;
-  const [tab, setTab] = useResettableState<"overview" | "tailor" | "track", string | null>(id, () => "overview");
+  const [tab, setTab] = useResettableState<"overview" | "tailor" | "apply" | "track", string | null>(id, () => "overview");
   const [analysis, setAnalysis] = useResettableState<JobAnalysis | null, string | null>(id, () => job?.analysis ?? null);
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useResettableState(id, () => job?.notes ?? "");
@@ -165,6 +166,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
         options={[
           { value: "overview", label: "Overview" },
           { value: "tailor", label: "Tailor with AI" },
+          { value: "apply", label: "Apply" },
           { value: "track", label: "Tracking" },
         ]}
       />
@@ -290,6 +292,8 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
           </div>
         )
       ) : null}
+
+      {tab === "apply" ? <ApplyPanel job={job} /> : null}
 
       {tab === "track" ? (
         <div className="space-y-4">

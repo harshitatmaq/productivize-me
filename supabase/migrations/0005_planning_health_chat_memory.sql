@@ -12,6 +12,8 @@
 --            like and believe) + re-plannable "Plan my day" times
 --   Part 4 · AI activity log (which model answered each AI task, how fast,
 --            and why calls failed; no prompt content is stored)
+--   Part 5 · Applications: answer bank, application packs (form fields with
+--            answers), what you submitted, and a timeline per application
 -- =============================================================================
 
 -- #############################################################################
@@ -622,3 +624,66 @@ create table if not exists public.ai_calls (
 create index if not exists ai_calls_created_idx on public.ai_calls (created_at desc);
 alter table public.ai_calls enable row level security;
 grant all on public.ai_calls to service_role;
+
+-- #############################################################################
+-- Part 5 · Applications
+-- #############################################################################
+
+-- Your standard answers, filled once and reused in every application. Custom
+-- questions you answer while applying are saved here too.
+create table if not exists public.answer_bank (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  key text not null check (char_length(key) between 1 and 120),
+  question text not null check (char_length(question) between 1 and 300),
+  answer text not null default '' check (char_length(answer) <= 4000),
+  category text not null default 'other' check (category in ('contact', 'work', 'eligibility', 'education', 'reusable', 'other')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, key)
+);
+drop trigger if exists answer_bank_updated_at on public.answer_bank;
+create trigger answer_bank_updated_at before update on public.answer_bank for each row execute function public.set_updated_at();
+
+-- One application per job: the form's fields with prepared answers, the cover
+-- letter and tailored resume used, a snapshot of what you submitted, and a timeline.
+create table if not exists public.applications (
+  job_id uuid primary key references public.jobs (id) on delete cascade,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  form_source text not null default 'common' check (form_source in ('greenhouse', 'common')),
+  apply_url text,
+  fields jsonb not null default '[]',
+  cover_letter text,
+  resume jsonb,
+  submitted jsonb,
+  timeline jsonb not null default '[]',
+  prepared_at timestamptz,
+  applied_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists applications_user_idx on public.applications (user_id, updated_at desc);
+drop trigger if exists applications_updated_at on public.applications;
+create trigger applications_updated_at before update on public.applications for each row execute function public.set_updated_at();
+
+alter table public.answer_bank enable row level security;
+alter table public.applications enable row level security;
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['answer_bank', 'applications']
+  loop
+    execute format('drop policy if exists "own rows" on public.%I', t);
+    execute format(
+      'create policy "own rows" on public.%I for all to authenticated
+         using (user_id = (select auth.uid()))
+         with check (user_id = (select auth.uid()))',
+      t
+    );
+  end loop;
+end;
+$$;
+grant select, insert, update, delete on public.answer_bank, public.applications to authenticated;
+grant all on public.answer_bank, public.applications to service_role;
+

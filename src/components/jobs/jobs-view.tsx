@@ -16,12 +16,14 @@ import { Activity } from "./activity";
 import { JobDrawer } from "./job-drawer";
 import { JobGrid } from "./job-grid";
 import { LiveRun } from "./live-run";
+import type { JobProfile } from "@/lib/jobs/types";
+import { AnswerBank } from "./answer-bank";
 import { ProfileEditor } from "./profile-editor";
 import { ScoutChat } from "./scout-chat";
 import { SearchPanel } from "./search-panel";
 import { TrackerBoard } from "./tracker-board";
 
-type Tab = "matches" | "search" | "tracker" | "profile" | "activity";
+type Tab = "matches" | "search" | "tracker" | "answers" | "profile" | "activity";
 
 export function JobsView() {
   const params = useSearchParams();
@@ -135,6 +137,7 @@ export function JobsView() {
             { value: "matches", label: "Matches", count: counts.new || undefined },
             { value: "search", label: <span className="inline-flex items-center gap-1.5"><MessageSquareText className="h-3.5 w-3.5" /> Search &amp; ask</span> },
             { value: "tracker", label: "Tracker", count: tracked.length || undefined },
+            { value: "answers", label: "Answer bank" },
             { value: "profile", label: ready ? "Profile & Scout" : "Set up Scout" },
             { value: "activity", label: "Activity" },
           ]}
@@ -225,6 +228,8 @@ export function JobsView() {
       {tab === "search" ? <SearchPanel jobs={jobs} onOpen={setOpen} /> : null}
 
       {tab === "tracker" ? <TrackerBoard jobs={tracked} onOpen={setOpen} /> : null}
+
+      {tab === "answers" ? <AnswerBank profile={(row?.profile ?? {}) as JobProfile} /> : null}
 
       {tab === "profile" ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

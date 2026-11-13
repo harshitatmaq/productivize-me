@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
@@ -24,6 +25,18 @@ function baseResume(p: PortfolioData, email?: string | null): ResumeData {
     education: p.education,
     certifications: p.certifications,
   };
+}
+
+/** Keeps the tailored resume with the job's application record (best-effort). */
+async function rememberResume(supabase: SupabaseClient, userId: string, jobId: string, resume: ResumeData) {
+  try {
+    const { data: app } = await supabase.from("applications").select("timeline, resume").eq("job_id", jobId).maybeSingle();
+    const timeline = [...((app?.timeline ?? []) as unknown[])];
+    if (!app?.resume) timeline.push({ at: new Date().toISOString(), kind: "resume", text: "Tailored resume made for this job" });
+    await supabase.from("applications").upsert({ job_id: jobId, user_id: userId, resume, timeline: timeline.slice(-50) }, { onConflict: "job_id" });
+  } catch {
+    // the application record is optional (and needs migration 0005 part 5)
+  }
 }
 
 /**
@@ -89,6 +102,7 @@ Return ONLY JSON with the same shape as the input resume (name, headline, contac
         certifications: data.certifications ?? base.certifications,
         tailoredFor: { title: job.title, company: job.company },
       };
+      await rememberResume(supabase, user.id, parsed.data.jobId, resume);
       return { ok: true, resume, tailored: true };
     } catch {
       // AI unavailable: still useful — add the analysis bullets as a highlights block.
