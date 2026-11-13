@@ -43,3 +43,6 @@ next-env.d.ts
 # local scratch
 .sqltest.mjs
 !.env.example
+
+# local HTTPS certificates (next dev --experimental-https)
+certificates

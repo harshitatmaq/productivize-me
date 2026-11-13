@@ -99,6 +99,26 @@ export function __setFetch(f: FetchLike | null) {
   retired.clear();
 }
 
+type CallRecord = { purpose?: string; provider?: string; model?: string; ok: boolean; ms: number; fallbacks: number; error?: string };
+let callRecorder: ((r: CallRecord) => void | Promise<void>) | null = null;
+
+/** Test hook: capture activity-log rows instead of writing them to the database. */
+export function __setCallRecorder(fn: ((r: CallRecord) => void | Promise<void>) | null) {
+  callRecorder = fn;
+}
+
+/** One row in the AI activity log (no prompt content). Best-effort: never throws. */
+async function record(r: CallRecord) {
+  try {
+    if (callRecorder) return await callRecorder(r);
+    if (process.env.VITEST || typeof window !== "undefined") return;
+    const { recordAiCall } = await import("./record");
+    await recordAiCall(r);
+  } catch {
+    // logging must never break an AI request
+  }
+}
+
 /** Lets server code count calls per provider without a hard dependency here. */
 export function setUsageRecorder(fn: ((provider: string) => void) | null) {
   usageRecorder = fn;
@@ -209,6 +229,9 @@ export async function chat(opts: ChatOptions, validate?: (text: string) => void)
   }
 
   const size = estimateTokens(opts);
+  const chainStarted = Date.now();
+  let failedCalls = 0;
+  let lastError: string | undefined;
   const badKey = new Set<string>();
   for (const { provider: p, model } of steps) {
     const key = `${p.id}:${model}`;
@@ -253,10 +276,13 @@ export async function chat(opts: ChatOptions, validate?: (text: string) => void)
       }
       attempts.push({ provider: p.id, model, ok: true, ms: Date.now() - started });
       usageRecorder?.(p.id);
+      await record({ purpose: opts.purpose, provider: p.id, model, ok: true, ms: Date.now() - chainStarted, fallbacks: failedCalls, error: lastError });
       return { text, provider: p.id, model, attempts, toolCalls: out.toolCalls, finishReason: out.finishReason };
     } catch (e) {
       const err = e as ProviderError;
       attempts.push({ provider: p.id, model, ok: false, ms: Date.now() - started, error: err.message });
+      failedCalls++;
+      lastError = `${p.id}/${model}: ${err.message}`;
       const verdict = classifyFailure(err.status, err.message ?? "", err.retryAfterMs);
       if (verdict.until) cooldowns.set(key, verdict.until);
       if (verdict.kind === "auth") badKey.add(p.id); // bad key: no point trying this provider's other models
@@ -269,6 +295,7 @@ export async function chat(opts: ChatOptions, validate?: (text: string) => void)
     }
   }
 
+  await record({ purpose: opts.purpose, ok: false, ms: Date.now() - chainStarted, fallbacks: failedCalls, error: lastError ?? attempts.at(-1)?.error });
   throw new LlmChainError(
     `All LLM providers failed: ${attempts.map((a) => `${a.provider}/${a.model}: ${a.error}`).join(" | ")}`,
     attempts,
