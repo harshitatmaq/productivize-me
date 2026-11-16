@@ -8,6 +8,7 @@ import { api, cn, timeAgo } from "@/lib/utils";
 
 const LABELS: Record<string, string> = {
   "plan-day": "Plan my day",
+  "tasks-from-text": "Describe your day",
   "preferences-learn": "Remember (preferences)",
   "memory-learn": "Daily memory learning",
   onboarding: "Scout interview",

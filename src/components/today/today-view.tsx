@@ -15,6 +15,7 @@ import { useProfile } from "@/lib/queries/profile";
 import { useCarryTasks, useTasks } from "@/lib/queries/tasks";
 import { minutesOf } from "@/lib/time";
 import { cn, plural } from "@/lib/utils";
+import { DescribeDayButton } from "./describe-day";
 import { PlanDay } from "./plan-day";
 import { TodayRail } from "./today-rail";
 
@@ -146,11 +147,10 @@ export function TodayView() {
 
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start">
           <QuickAdd defaultDate={today} className="flex-1" />
-          {open.length + overdue.length >= 2 ? (
-            <div className="flex justify-end sm:pt-2">
-              <PlanDay />
-            </div>
-          ) : null}
+          <div className="flex flex-wrap justify-end gap-2 sm:pt-2">
+            <DescribeDayButton />
+            {open.length + overdue.length >= 2 ? <PlanDay /> : null}
+          </div>
         </div>
 
         {isLoading ? (
