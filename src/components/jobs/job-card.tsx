@@ -28,6 +28,11 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
               <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted">
                 <span className="truncate">{job.company ?? "Unknown company"}</span>
                 {fresh ? <span className="rounded bg-accent px-1 text-[10px] font-semibold uppercase tracking-wide text-white">new</span> : null}
+                {job.closed_at ? (
+                  <Tip content={`${job.closed_reason ?? "No longer accepting applications"} · checked ${timeAgo(job.closed_at)}`}>
+                    <span className="rounded bg-danger/15 px-1 text-[10px] font-semibold uppercase tracking-wide text-danger">closed</span>
+                  </Tip>
+                ) : null}
               </div>
             </div>
             <Tip content={job.verdict ? `${job.verdict} match` : "match score"}>

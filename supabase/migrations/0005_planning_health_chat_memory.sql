@@ -14,6 +14,8 @@
 --            and why calls failed; no prompt content is stored)
 --   Part 5 · Applications: answer bank, application packs (form fields with
 --            answers), what you submitted, and a timeline per application
+--   Part 6 · Job freshness (expired / closed postings leave the board) and
+--            the learning map (topics per entry and how topics connect)
 -- =============================================================================
 
 -- #############################################################################
@@ -686,4 +688,38 @@ end;
 $$;
 grant select, insert, update, delete on public.answer_bank, public.applications to authenticated;
 grant all on public.answer_bank, public.applications to service_role;
+
+-- #############################################################################
+-- Part 6 · Job freshness + learning map
+-- #############################################################################
+
+-- When the posting was last checked, and when (and why) it stopped accepting
+-- applications. Closed or very old "new" jobs are archived off the board.
+alter table public.jobs add column if not exists checked_at timestamptz;
+alter table public.jobs add column if not exists closed_at timestamptz;
+alter table public.jobs add column if not exists closed_reason text;
+create index if not exists jobs_freshness_idx on public.jobs (user_id, checked_at nulls first) where closed_at is null;
+
+-- Learning map: the topics each learning entry is about, and what it builds on / leads to.
+alter table public.learning_entries add column if not exists topics text[] not null default '{}';
+alter table public.learning_entries add column if not exists connections jsonb not null default '[]';
+
+create table if not exists public.topic_links (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  from_topic text not null check (char_length(from_topic) between 1 and 80),
+  to_topic text not null check (char_length(to_topic) between 1 and 80),
+  -- prereq: from_topic comes before to_topic · related: they connect
+  kind text not null default 'related' check (kind in ('prereq', 'related')),
+  why text check (char_length(why) <= 300),
+  created_at timestamptz not null default now(),
+  unique (user_id, from_topic, to_topic)
+);
+alter table public.topic_links enable row level security;
+drop policy if exists "own rows" on public.topic_links;
+create policy "own rows" on public.topic_links for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+grant select, insert, update, delete on public.topic_links to authenticated;
+grant all on public.topic_links to service_role;
 

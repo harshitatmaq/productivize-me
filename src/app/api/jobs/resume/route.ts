@@ -7,7 +7,7 @@ import { normalizePortfolio, portfolioFromProfile, type PortfolioData } from "@/
 
 export const maxDuration = 120;
 
-const Body = z.object({ jobId: z.string().uuid().optional() });
+const Body = z.object({ jobId: z.string().uuid().optional(), regenerate: z.boolean().optional() });
 
 function baseResume(p: PortfolioData, email?: string | null): ResumeData {
   return {
@@ -59,6 +59,12 @@ export async function POST(request: Request) {
     }
     const base = baseResume(source, user.email);
     if (!parsed.data.jobId) return { ok: true, resume: base, tailored: false };
+    // The version saved for this job (tailored earlier, or pasted back from Claude/ChatGPT) — no new AI call.
+    if (!parsed.data.regenerate) {
+      const { data: app } = await supabase.from("applications").select("resume").eq("job_id", parsed.data.jobId).maybeSingle();
+      const saved = app?.resume as ResumeData | null;
+      if (saved && Array.isArray(saved.experience)) return { ok: true, resume: { ...saved, contact: saved.contact ?? base.contact }, tailored: true, saved: true };
+    }
 
     const { data: job } = await supabase.from("jobs").select("title, company, description, analysis").eq("id", parsed.data.jobId).single();
     if (!job) throw new HttpError(404, "Job not found");

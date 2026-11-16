@@ -29,6 +29,8 @@ Platforms: **Android + Windows first** (iPhone pieces that already exist stay as
 | 18 | Plan my day | Real durations (your estimate → your history → AI judgement), start a few minutes from now, re-plan any time with a typed change; times a plan set stay movable until you change them |
 | 19 | Applications | No auto-submit and no extension yet: the app prepares answers (bank → profile → AI drafts for open questions only, "needs you" for facts) and the user submits. Reply emails update status by rules, never via AI |
 | 20 | Learning map | After phase 3: a light "connect the dots" layer on existing learning data, not a tutor (LearnHarness covers deep tutoring) |
+| 21 | Job freshness | Closed postings are removed using public signals only (job-board APIs, logged-out pages); "new" jobs older than 30 days are archived; saved jobs stay, marked closed |
+| 22 | Weekend deep search | Saturday/Sunday from 9 AM local, once per day: every source, 3× web queries, more scoring, freshness sweep, summary notification |
 
 ---
 
@@ -226,10 +228,10 @@ All background AI work goes through **one Supabase queue** (`agent_jobs`): type,
 1. ✅ **Worker + queue + sources**: JobSpy, career sites, Gmail label; live-streaming feed; Search & ask Scout page.
 2. ✅ **Career memory + Interests + sharing**: Interests page (what Scout knows), check-in questions, job relevance feeding search and scoring; shared dashboards with email invites, Share to… everywhere, shared lists; icon labels.
 3. ✅ **Applications** (without the extension): answer bank, Prepare application (Greenhouse forms read exactly, common questions elsewhere, AI drafts for open questions, "needs you" for facts), Apply sheet with copy buttons, Mark applied (snapshot + answer bank learning + follow-up), application history, email status updates by rules.
-3b. **Learning map** (after phase 3, decided Nov 2026): link each learning entry to related topics with one small AI call, a topic map in Learning coloured by strength (minutes + flashcard recall), and "learn next" from job skill gaps. Deep tutoring stays in LearnHarness.
-4. **Stretch prompts** + paste-back resume versions.
-5. **Edge/Chrome extension** (Greenhouse, Lever, Ashby → Workday).
-6. **02:00 IST MAQ batch** + animation polish.
+3b. ✅ **Learning map** (after phase 3, decided Nov 2026): link each learning entry to related topics with one small AI call, a topic map in Learning coloured by strength (minutes + flashcard recall), and "learn next" from job skill gaps. Deep tutoring stays in LearnHarness.
+4. ✅ **Stretch prompts** + paste-back resume versions (saved per job, reused for the PDF).
+5. **Edge/Chrome extension** (Greenhouse, Lever, Ashby → Workday) — deliberately not built for now: the Apply sheet (copy per field) covers it without another app to install and maintain.
+6. ✅ **Overnight + weekend batch**: applications for saved jobs prepared 2-3 AM; weekend deep search (every source, more queries and scoring) with a freshness sweep; daily posting checks remove expired jobs. MAQ can lead any lane via `LLM_LANE_*`.
 
 ## Setup this will add (per user)
 

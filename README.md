@@ -167,6 +167,19 @@ Setup for Windows, Oracle (Docker) and the Gmail label: [worker/README.md](worke
 - **AI activity:** Settings → Integrations shows the last 7 days per task: requests, how many were answered, retries, average time, which model usually answered, and requests where every model failed. Only the task, model, timing and error are logged (never prompts or replies), kept 30 days, visible to the founding accounts.
 - **Which models work with my keys?** Run `npm run ai:check`. It lists what each provider offers, test-calls every configured model and prints the settings to paste.
 
+**A fresh job board.** Postings that stop accepting applications leave the board automatically:
+- Greenhouse and Lever jobs are checked through their public job APIs (404 = closed), Ashby through its public job board, LinkedIn through its public logged-out job page ("No longer accepting applications"), and anything else by the page being gone or saying it's closed/expired/filled.
+- Each posting is re-checked about once a day (a few per scheduler tick, more on the worker, which can read LinkedIn pages that cloud servers often can't). **Search now** also clears expired ones.
+- Closed "new" jobs are archived off the board; closed saved jobs stay with a red "closed" badge so you can see what happened. "New" jobs older than 30 days are archived too (`JOBS_MAX_AGE_DAYS`).
+
+**Weekend deep search.** On Saturday and Sunday (from 9 AM your time) the first scheduled run of the day searches every source at once, with three times the web queries, more titles and twice as many jobs scored, then re-checks up to 60 open postings and removes expired ones. You get a summary notification ("Weekend job search: 14 new matches (3 strong) · removed 9 expired postings"), so the board is ready for the week.
+
+**Overnight.** Between 2 and 3 AM your time, applications for jobs you saved are prepared (one per scheduler tick), so the packs are waiting in the morning with a notification each.
+
+**Stretch jobs (Tailor tab).** For roles that are a reach (about 40-69), *Open Claude* / *Open ChatGPT* copies a detailed prompt (the job, your profile and resume, the gaps found, honesty rules: reframe, never invent). Paste the resume it writes back and it becomes this job's resume PDF. Tailored resumes are saved per job and reused (no new AI call) unless you tick "Make a fresh version".
+
+**Learning map (Learning page).** Every entry you log is linked to 1-3 topics with one small AI call, plus what it builds on and leads to. The map shows your topics (darker = stronger, from time spent, number of entries and flashcard recall), how they connect, and **Learn next**: topics that build on what you know, appear in your job skill gaps, or matter for your target roles. *Map past entries* links older entries. Deep tutoring is better done in a dedicated tutor such as LearnHarness; this map connects the dots across what you log.
+
 **Applications (Jobs → Apply tab on any job).**
 - **Answer bank** (Jobs → Answer bank): contact details, current role, experience, pay, notice period, work authorization, education and reusable answers. Fill them once; suggestions from your profile are one click away.
 - **Prepare application:** for Greenhouse jobs it reads the company's real form (official public API); elsewhere it uses the questions most forms ask. Each field is filled from your answer bank or profile, open questions ("Why us?", "Describe a project…") are drafted by the AI from your real experience, and facts it doesn't know (pay, visa, dates) are marked **Needs you**, never guessed. A cover letter is included and the tailored resume PDF is one click away.

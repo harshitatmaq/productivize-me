@@ -382,3 +382,23 @@ describe("applications", () => {
   });
 });
 
+describe("job freshness and learning map tables", () => {
+  it("adds freshness columns and keeps topic links private", async () => {
+    await db.exec(`reset role`);
+    await asUser(u1);
+    await db.exec(`set role authenticated`);
+    const job = await one<{ id: string }>(`insert into public.jobs (url, url_hash, dedupe_key, title) values ('https://x.com/k', 'h-fresh', 'd-fresh', 'ML Engineer') returning id`);
+    await db.exec(`update public.jobs set checked_at = now(), closed_at = now(), closed_reason = 'No longer accepting applications', status = 'archived' where id = '${job.id}'`);
+    const e = await one<{ id: string }>(`insert into public.learning_entries (title, topics, connections) values ('SQL joins', '{"SQL Joins"}', '[{"kind":"leads_to","topic":"Window Functions"}]') returning id`);
+    expect(e.id).toBeTruthy();
+    await db.exec(`insert into public.topic_links (from_topic, to_topic, kind) values ('SQL Joins', 'Window Functions', 'prereq')`);
+    await db.exec(`insert into public.topic_links (from_topic, to_topic, kind) values ('SQL Joins', 'Window Functions', 'prereq') on conflict do nothing`);
+    expect((await db.query(`select * from public.topic_links`)).rows).toHaveLength(1);
+    await db.exec(`reset role`);
+    await asUser(u2);
+    await db.exec(`set role authenticated`);
+    expect((await db.query(`select * from public.topic_links`)).rows).toHaveLength(0);
+    await db.exec(`reset role`);
+  });
+});
+
