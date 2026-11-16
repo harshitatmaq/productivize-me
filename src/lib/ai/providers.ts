@@ -188,6 +188,7 @@ const LANES: Record<string, string> = {
 };
 const PURPOSE_LANES: Record<string, string> = {
   "plan-day": "plan",
+  "tasks-from-text": "plan",
   "preferences-learn": "quick",
   "job-query": "quick",
   "job-import": "quick",

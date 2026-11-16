@@ -1,6 +1,7 @@
 "use client";
 
-import { AlarmClock, CalendarDays, CornerDownLeft, Flag, Hash, Mic, Plus, Repeat, Timer, X } from "lucide-react";
+import { AlarmClock, CalendarDays, CornerDownLeft, Flag, Hash, Mic, Plus, Repeat, Sparkles, Timer, X } from "lucide-react";
+import { DescribeDayDialog } from "@/components/today/describe-day";
 import { useVoiceInput } from "@/lib/voice";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -42,6 +43,9 @@ export function QuickAdd({
   // Your routines decide the time when you didn't type one ("Read 20 pages" → 22:30).
   const { data: profile } = useProfile();
   const [declined, setDeclined] = useState<string | null>(null);
+  // Several tasks typed in one go ("gym at 7, finish the report and call mom tonight") → offer the AI split.
+  const several = text.length > 40 && text.split(/[,;\n]|\band then\b|\bthen\b|\balso\b|\.\s/i).filter((p) => p.trim().length > 2).length >= 3;
+  const [splitText, setSplitText] = useState<string | null>(null);
   const suggestion =
     parsed?.title && !parsed.due_time
       ? suggestTime({ title: parsed.title, tags: parsed.tags }, profile?.planning, due ? new Date(`${due}T12:00:00`).getDay() : undefined)
@@ -76,6 +80,10 @@ export function QuickAdd({
   };
 
   const active = focused || !!text;
+  const openSplit = () => {
+    setSplitText(text);
+    setText("");
+  };
 
   return (
     <div
@@ -195,6 +203,16 @@ export function QuickAdd({
           ))}
         </div>
       ) : null}
+      {several ? (
+        <div className="flex items-center gap-2 border-t border-line px-3 py-2 text-[12px] text-muted animate-fade-in">
+          <Sparkles className="h-3.5 w-3.5 text-accent" />
+          Looks like several tasks.
+          <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={openSplit} className="font-medium text-accent hover:underline">
+            Split them with AI
+          </button>
+        </div>
+      ) : null}
+      <DescribeDayDialog open={splitText !== null} onOpenChange={(o) => !o && setSplitText(null)} initialText={splitText ?? ""} />
     </div>
   );
 }

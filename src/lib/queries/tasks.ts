@@ -30,6 +30,15 @@ function patchCache(qc: ReturnType<typeof useQueryClient>, fn: (tasks: Task[]) =
   return prev;
 }
 
+/** Adds several tasks at once ("Describe your day"). */
+export function useCreateTasks() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (inputs: TaskInput[]) => unwrap(await sb().from("tasks").insert(inputs).select("*")) as Task[],
+    onSettled: () => qc.invalidateQueries({ queryKey: TASK_KEY }),
+  });
+}
+
 export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
