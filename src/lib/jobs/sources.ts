@@ -16,6 +16,8 @@ export type SourceContext = {
   watch: WatchCompany[];
   /** Manual "search now": skip interval and pacing checks. */
   manual: boolean;
+  /** Weekend deep search: try more queries/titles than a normal run. */
+  deep?: boolean;
   /** Rotating cursor (persisted per user+source) so each run tries different queries. */
   cursor: number;
   log: (msg: string) => void;
@@ -485,11 +487,12 @@ const web: JobSource = {
   kind: "search",
   minIntervalMin: 55,
   configured: () => !!(env("TAVILY_API_KEY") || env("SERPER_API_KEY") || env("BRAVE_API_KEY") || env("EXA_API_KEY") || env("SEARXNG_URL")),
-  async fetch({ plan, cursor, manual, log }) {
+  async fetch({ plan, cursor, manual, deep, log }) {
     const queries = plan.web_queries.length
       ? plan.web_queries
       : plan.titles.slice(0, 3).map((t) => ({ q: `${t} job ${plan.locations[0] ?? ""}`.trim(), domains: "ats" as const }));
-    const perRun = manual ? 3 : envInt("WEB_QUERIES_PER_RUN", env("SEARXNG_URL") ? 6 : 2);
+    const normal = envInt("WEB_QUERIES_PER_RUN", env("SEARXNG_URL") ? 6 : 2);
+    const perRun = deep ? Math.max(6, normal * 3) : manual ? 3 : normal;
     const out: RawJob[] = [];
     for (const wq of pick(queries, cursor, perRun)) {
       const domains = wq.domains ? DOMAIN_GROUPS[wq.domains] : [];
@@ -792,7 +795,7 @@ function jobspySource(site: "linkedin" | "indeed" | "glassdoor" | "naukri"): Job
     minIntervalMin: site === "glassdoor" ? 120 : 55,
     workerOnly: true,
     configured: () => jobspySites().includes(site),
-    async fetch({ plan, cursor, manual, lastRunAt }) {
+    async fetch({ plan, cursor, manual, deep, lastRunAt }) {
       const india = plan.countries.includes("in") || plan.countries.length === 0;
       const location =
         plan.remote === "remote"
@@ -804,7 +807,7 @@ function jobspySource(site: "linkedin" | "indeed" | "glassdoor" | "naukri"): Job
       const hours = lastRunAt ? Math.min(72, Math.max(2, Math.ceil((Date.now() - lastRunAt) / 3_600_000) + 1)) : 72;
       const out: RawJob[] = [];
       // Sequential and small: gentle on LinkedIn's rate limits.
-      for (const title of pick(plan.titles, cursor, manual ? 3 : 2)) {
+      for (const title of pick(plan.titles, cursor, deep ? 5 : manual ? 3 : 2)) {
         const records = await runJobspy({
           site,
           search_term: title,

@@ -16,6 +16,7 @@ import type { Profile } from "@/lib/cron/tick";
 import { discoverBoards, type DiscoveryLog } from "@/lib/jobs/discover";
 import { INDIA_FOCUS_COMPANIES } from "@/lib/jobs/company-seed";
 import { gmailAccounts } from "@/lib/jobs/gmail";
+import { sweepJobs } from "@/lib/jobs/liveness-run";
 import { jobspySites } from "@/lib/jobs/jobspy";
 import { runJobSearch } from "@/lib/jobs/pipeline";
 import { LIVE_SOURCE_IDS } from "@/lib/jobs/sources";
@@ -111,6 +112,14 @@ async function searchTick() {
         }
       } catch (e) {
         log(`${p.email}: search failed:`, (e as Error).message);
+      }
+      // Keep the board fresh: check a few postings not checked in the last day (the worker
+      // can read LinkedIn's public job pages, which often block cloud servers).
+      try {
+        const sw = await sweepJobs(supabaseAdmin(), p.id, { limit: 10, recheckHours: 24 });
+        if (sw.closed || sw.stale || ONCE) log(`${p.email}: freshness · checked ${sw.checked}, removed ${sw.closed} closed, ${sw.stale} old`);
+      } catch (e) {
+        log(`${p.email}: freshness check failed:`, (e as Error).message);
       }
     }
   } finally {

@@ -17,6 +17,7 @@ import type { JobAnalysis } from "@/lib/jobs/types";
 import { CompanyLogo, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
 import { ApplyPanel } from "./apply-panel";
+import { StretchCard } from "./stretch-card";
 import { ResumeButton } from "./resume-pdf";
 
 function CopyButton({ text }: { text: string }) {
@@ -137,6 +138,11 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
     >
       <div className="mb-4 flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
         <ScoreBadge score={job.score} />
+        {job.closed_at ? (
+          <Badge tone="danger">
+            <AlertTriangle className="h-3 w-3" /> {job.closed_reason ?? "No longer accepting applications"}
+          </Badge>
+        ) : null}
         {job.location ? (
           <span className="inline-flex items-center gap-1">
             <MapPin className="h-3.5 w-3.5" /> {job.location}
@@ -291,6 +297,12 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
             </Button>
           </div>
         )
+      ) : null}
+
+      {tab === "tailor" ? (
+        <div className="mt-5">
+          <StretchCard job={job} />
+        </div>
       ) : null}
 
       {tab === "apply" ? <ApplyPanel job={job} /> : null}

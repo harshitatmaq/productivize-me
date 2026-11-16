@@ -109,6 +109,9 @@ export type LearningEntry = {
   review_count: number;
   last_reviewed_at: string | null;
   created_at: string;
+  /** Learning map: topics this entry is about, and what it builds on / leads to. */
+  topics?: string[];
+  connections?: { kind: "builds_on" | "leads_to"; topic: string; why?: string }[];
 };
 
 export type ChatItem = {
@@ -171,6 +174,10 @@ export type Job = {
   ats: string | null;
   /** Your interests this job mentions (with their job relevance at the time). */
   interest_matches: { id: string; name: string; relevance: number }[];
+  /** Job freshness: last posting check, and when/why it stopped accepting applications. */
+  checked_at?: string | null;
+  closed_at?: string | null;
+  closed_reason?: string | null;
   /** Set when the job was found by a "Search & ask Scout" query. */
   search_id: string | null;
   created_at: string;

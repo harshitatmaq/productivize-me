@@ -12,6 +12,8 @@ import { applyInterestsToPlan, interestBonus, interestContext, matchInterests, t
 import { buildSearchPlan } from "./profile";
 import { feedbackContext, semanticRank, type Candidate } from "./rank";
 import { scoreJobs } from "./scoring";
+import { isDeepSearchTime, localDayHour } from "./liveness";
+import { sweepJobs } from "./liveness-run";
 import { JOB_SOURCES, type JobSource } from "./sources";
 import type { JobProfile, RawJob, SearchPlan, WatchCompany } from "./types";
 
@@ -45,6 +47,8 @@ export type RunOptions = {
   onlySources?: string[];
   /** Extra company boards to search in a live query (companies named in the request). */
   extraBoards?: WatchCompany[];
+  /** Weekend deep search: every source, more queries, more jobs scored, full freshness sweep. */
+  deep?: boolean;
 };
 
 type JobProfileRow = {
@@ -116,6 +120,19 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     return done(false);
   }
 
+  // Weekend deep search: on Saturday and Sunday (from 9 AM your time) the first scheduled
+  // run of the day searches everything, more thoroughly, and sweeps out expired postings.
+  let deep = !!opts.deep;
+  if (!deep && (opts.trigger === "cron" || opts.trigger === "worker")) {
+    const tz = (opts.profile as { timezone?: string }).timezone || "Asia/Kolkata";
+    if (isDeepSearchTime(new Date(), tz)) {
+      const key = `${userId}:deep:${localDayHour(new Date(), tz).date}`;
+      const { data: prev } = await admin.from("source_state").select("key, last_run_at, data").eq("key", key).maybeSingle<SourceStateRow>();
+      deep = await claimSource(admin, key, 20 * 60, prev ?? undefined);
+      if (deep) log("weekend deep search: every source, more queries, freshness sweep");
+    }
+  }
+
   // 1. Pick sources and claim the ones that are due (atomic across workers).
   const disabled = new Set(jp?.disabled_sources ?? []);
   const watch = live && opts.extraBoards?.length ? [...opts.extraBoards] : [...(jp?.watch_companies ?? [])];
@@ -138,7 +155,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
 
   const claimed: JobSource[] = [];
   for (const s of candidates) {
-    const minutes = live ? 0 : manual ? Math.min(s.minIntervalMin, 10) : s.minIntervalMin;
+    const minutes = live || deep ? 0 : manual ? Math.min(s.minIntervalMin, 10) : s.minIntervalMin;
     if (await claimSource(admin, keyFor(s), minutes, states.get(keyFor(s)))) claimed.push(s);
     else stats.sources[s.id] = { fetched: 0, skipped: "ran recently" };
   }
@@ -215,7 +232,8 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
           const jobs = await s.fetch({
             plan,
             watch,
-            manual: manual || live,
+            manual: manual || live || deep,
+            deep,
             cursor,
             log,
             userId,
@@ -274,7 +292,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     // 7. Keyword pre-filter → semantic re-rank (embeddings + 👍/👎) → full descriptions → LLM scoring.
     stats.stage = "Ranking and scoring";
     await pushProgress(true);
-    const maxScore = envInt("JOBS_MAX_SCORED_PER_RUN", manual || live ? 40 : 32);
+    const maxScore = envInt("JOBS_MAX_SCORED_PER_RUN", deep ? 64 : manual || live ? 40 : 32);
     const minRel = live ? 0.15 : Number(process.env.JOBS_MIN_RELEVANCE ?? 0.3);
     const keywordPool: Candidate[] = fresh
       .map((job) => ({ job, rel: job.needs_extraction ? Math.max(relevance(job, plan, profile), 0.45) : relevance(job, plan, profile) }))
@@ -284,7 +302,7 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     const { ranked: reranked, model: embeddingModel } = await semanticRank(admin, userId, profile, jp?.profile_embedding ?? null, keywordPool, log);
     const ranked = reranked.filter((x) => x.rel >= minRel).slice(0, maxScore);
 
-    const enrichCount = envInt("JOBS_ENRICH_PER_RUN", manual || live ? 10 : 8);
+    const enrichCount = envInt("JOBS_ENRICH_PER_RUN", deep ? 16 : manual || live ? 10 : 8);
     const toEnrich = ranked.slice(0, enrichCount).filter((c) => (c.job.description ?? "").length < 1200);
     let enriched = 0;
     for (let i = 0; i < toEnrich.length; i += 4) {
@@ -392,6 +410,26 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     if (live && opts.searchId) {
       const { count } = await admin.from("jobs").select("id", { count: "exact", head: true }).eq("search_id", opts.searchId);
       await admin.from("searches").update({ last_run_at: new Date().toISOString(), result_count: count ?? stats.inserted }).eq("id", opts.searchId);
+    }
+
+    if (manual && !deep) {
+      // "Search now" also clears out postings that stopped accepting applications.
+      const sweep = await sweepJobs(admin, userId, { limit: 20, recheckHours: 6 }).catch(() => ({ checked: 0, closed: 0, stale: 0 }));
+      if (sweep.closed || sweep.stale) log(`freshness: removed ${sweep.closed} closed and ${sweep.stale} older postings`);
+    }
+    if (deep) {
+      stats.stage = "Removing expired postings";
+      await pushProgress(true);
+      const sweep = await sweepJobs(admin, userId, { limit: 60, recheckHours: 12 }).catch(() => ({ checked: 0, closed: 0, stale: 0 }));
+      log(`freshness: checked ${sweep.checked}, removed ${sweep.closed} closed and ${sweep.stale} older postings`);
+      await notify(opts.profile, {
+        kind: "jobs",
+        dedupeKey: `deep:${userId}:${new Date().toISOString().slice(0, 10)}`,
+        title: `Weekend job search: ${stats.inserted} new match${stats.inserted === 1 ? "" : "es"}${stats.strong ? ` (${stats.strong} strong)` : ""}`,
+        body: `Searched every source${sweep.closed + sweep.stale ? ` and removed ${sweep.closed + sweep.stale} expired or old posting${sweep.closed + sweep.stale === 1 ? "" : "s"}` : ""}.`,
+        url: "/jobs",
+        push: { tag: "jobs-weekend" },
+      }).catch(() => {});
     }
 
     const anyError = Object.values(stats.sources).some((s) => s.error);

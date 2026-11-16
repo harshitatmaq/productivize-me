@@ -1,5 +1,6 @@
 "use client";
 
+import { LearningMap } from "./learning-map";
 import { BookOpenCheck, Brain, ChevronDown, Clock, Flame, GraduationCap, Layers, Link2, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -93,6 +94,13 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
               </span>
             ))}
           </div>
+          {e.connections?.length ? (
+            <div className="mt-1 text-[11.5px] text-faint">
+              {e.connections.filter((c) => c.kind === "builds_on").length ? `Builds on ${e.connections.filter((c) => c.kind === "builds_on").map((c) => c.topic).join(", ")}` : ""}
+              {e.connections.some((c) => c.kind === "builds_on") && e.connections.some((c) => c.kind === "leads_to") ? " · " : ""}
+              {e.connections.filter((c) => c.kind === "leads_to").length ? `leads to ${e.connections.filter((c) => c.kind === "leads_to").map((c) => c.topic).join(", ")}` : ""}
+            </div>
+          ) : null}
         </div>
         <Menu
           label="More actions — continue with AI, flashcards, share, edit"
@@ -349,6 +357,8 @@ export function LearningView() {
             <SectionTitle>Last 26 weeks</SectionTitle>
             <Heatmap counts={stats.counts} today={today} weeks={26} weekStartsOn={profile?.week_starts_on ?? 1} />
           </Card>
+
+          <LearningMap onLogTopic={(topic) => setDraft({ ...blank(), title: topic, tags: [topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")] })} />
 
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">

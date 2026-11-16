@@ -19,6 +19,8 @@ const LABELS: Record<string, string> = {
   "job-import": "Job import",
   "job-analysis": "Job analysis",
   "application-pack": "Application answers",
+  "resume-import": "Resume paste-back",
+  "learning-connect": "Learning map links",
   resume: "Tailored resume",
   portfolio: "Portfolio",
   "memory-suggest": "Interest suggestions",

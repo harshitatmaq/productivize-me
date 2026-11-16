@@ -122,6 +122,7 @@ const PHONE_KEY = "pm-resume-phone";
 export function ResumeButton({ jobId, label = "Resume PDF", ...props }: { jobId?: string; label?: string } & ButtonProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fresh, setFresh] = useState(false);
   const [phone, setPhone] = useState(() => {
     try {
       return localStorage.getItem(PHONE_KEY) ?? "";
@@ -138,7 +139,7 @@ export function ResumeButton({ jobId, label = "Resume PDF", ...props }: { jobId?
       } catch {
         // ignore
       }
-      const r = await api<{ resume: ResumeData; tailored: boolean }>("/api/jobs/resume", { json: jobId ? { jobId } : {} });
+      const r = await api<{ resume: ResumeData; tailored: boolean; saved?: boolean }>("/api/jobs/resume", { json: jobId ? { jobId, regenerate: fresh } : {} });
       const resume: ResumeData = { ...r.resume, contact: { ...r.resume.contact, phone: phone || undefined } };
       const R = await import("@react-pdf/renderer");
       const blob = await R.pdf(buildDoc(R, resume)).toBlob();
@@ -150,7 +151,7 @@ export function ResumeButton({ jobId, label = "Resume PDF", ...props }: { jobId?
       a.download = `${who}${target}.pdf`.replace(/-+/g, "-");
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      toast.success(jobId ? (r.tailored ? "Tailored resume downloaded" : "Resume downloaded (AI unavailable — used your analysis bullets)") : "Resume downloaded");
+      toast.success(jobId ? (r.saved ? "Your saved resume for this job downloaded" : r.tailored ? "Tailored resume downloaded" : "Resume downloaded (AI unavailable — used your analysis bullets)") : "Resume downloaded");
       setOpen(false);
     } catch (e) {
       toast.error((e as Error).message);
@@ -183,6 +184,12 @@ export function ResumeButton({ jobId, label = "Resume PDF", ...props }: { jobId?
         <Field label="Phone (optional — stays on this device, never published)">
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98xxxxxx" inputMode="tel" />
         </Field>
+        {jobId ? (
+          <label className="mt-3 flex items-center gap-2 text-[12.5px] text-muted">
+            <input type="checkbox" checked={fresh} onChange={(e) => setFresh(e.target.checked)} />
+            Make a fresh version (otherwise the one saved for this job is reused)
+          </label>
+        ) : null}
       </Dialog>
     </>
   );

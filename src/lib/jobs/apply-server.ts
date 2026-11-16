@@ -1,6 +1,9 @@
 import "server-only";
 
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** The signed-in user, or (overnight) the person the job belongs to. */
+type Who = { id: string; email?: string | null };
 import { chatJson } from "@/lib/ai/llm";
 import { memoryContext } from "@/lib/memory/personal";
 import {
@@ -115,12 +118,13 @@ Return ONLY JSON: {"answers":[{"id":"…","answer":"…","confidence":0-100,"nee
 }
 
 /** Save → Prepare: builds (or rebuilds) the application pack for a job. Your own edits are kept. */
-export async function preparePack(supabase: SupabaseClient, user: User, jobId: string): Promise<Application> {
+export async function preparePack(supabase: SupabaseClient, user: Who, jobId: string): Promise<Application> {
+  // Every query is scoped to the user explicitly, so this is also safe with the service-role client (overnight).
   const [{ data: job }, { data: jp }, { data: bankRows }, { data: existing }] = await Promise.all([
-    supabase.from("jobs").select("id, title, company, url, apply_url, description, analysis, status").eq("id", jobId).single(),
+    supabase.from("jobs").select("id, title, company, url, apply_url, description, analysis, status").eq("id", jobId).eq("user_id", user.id).single(),
     supabase.from("job_profiles").select("profile, resume_text").eq("user_id", user.id).maybeSingle(),
-    supabase.from("answer_bank").select("key, question, answer, category"),
-    supabase.from("applications").select("*").eq("job_id", jobId).maybeSingle(),
+    supabase.from("answer_bank").select("key, question, answer, category").eq("user_id", user.id),
+    supabase.from("applications").select("*").eq("job_id", jobId).eq("user_id", user.id).maybeSingle(),
   ]);
   if (!job) throw new Error("Job not found");
   const profile = (jp?.profile ?? {}) as JobProfile;
@@ -170,13 +174,13 @@ export async function preparePack(supabase: SupabaseClient, user: User, jobId: s
   };
   const { data, error } = await supabase.from("applications").upsert(row, { onConflict: "job_id" }).select("*").single();
   if (error) throw new Error(`${error.message} (did you run supabase/migrations/0005_planning_health_chat_memory.sql?)`);
-  if (job.status === "new") await supabase.from("jobs").update({ status: "saved" }).eq("id", job.id);
+  if (job.status === "new") await supabase.from("jobs").update({ status: "saved" }).eq("id", job.id).eq("user_id", user.id);
   return data as Application;
 }
 
 /** Mark applied: snapshot what you submitted, remember new answers, move the job to Applied. */
-export async function markApplied(supabase: SupabaseClient, user: User, jobId: string): Promise<Application> {
-  const { data: app } = await supabase.from("applications").select("*").eq("job_id", jobId).maybeSingle();
+export async function markApplied(supabase: SupabaseClient, user: Who, jobId: string): Promise<Application> {
+  const { data: app } = await supabase.from("applications").select("*").eq("job_id", jobId).eq("user_id", user.id).maybeSingle();
   const now = new Date().toISOString();
   const fields = ((app?.fields ?? []) as PackField[]).filter((f) => f.type !== "file");
 
@@ -202,6 +206,6 @@ export async function markApplied(supabase: SupabaseClient, user: User, jobId: s
   const { data, error } = await supabase.from("applications").upsert(row, { onConflict: "job_id" }).select("*").single();
   if (error) throw new Error(error.message);
   // The database trigger adds the "Follow up" task when a job becomes Applied.
-  await supabase.from("jobs").update({ status: "applied", applied_at: now }).eq("id", jobId);
+  await supabase.from("jobs").update({ status: "applied", applied_at: now }).eq("id", jobId).eq("user_id", user.id);
   return data as Application;
 }

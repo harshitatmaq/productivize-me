@@ -1,6 +1,9 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { preparePack } from "@/lib/jobs/apply-server";
+import { localDayHour } from "@/lib/jobs/liveness";
+import { sweepJobs } from "@/lib/jobs/liveness-run";
 import { learnPreferences } from "@/lib/memory/personal";
 import { refreshMemory } from "@/lib/memory/refresh";
 import { notify, type NotifyProfile } from "@/lib/notify";
@@ -101,6 +104,41 @@ export async function runTick(now = new Date()) {
     }
   } catch (e) {
     console.warn("[tick] preference learning skipped:", (e as Error).message);
+  }
+  // Job freshness: check a few postings per person that haven't been checked for a day.
+  for (const p of (profiles ?? []) as Profile[]) {
+    if (!p.job_search_enabled) continue;
+    try {
+      const sw = await sweepJobs(admin, p.id, { limit: 5, recheckHours: 24 });
+      if (sw.closed || sw.stale) results[`freshness:${p.email ?? p.id}`] = [`removed ${sw.closed} closed, ${sw.stale} old (checked ${sw.checked})`];
+    } catch (e) {
+      console.warn("[tick] freshness skipped:", (e as Error).message);
+    }
+  }
+  // Overnight (2-3 AM your time): get one saved job's application ready per tick, so
+  // packs for everything you saved are waiting in the morning.
+  for (const p of (profiles ?? []) as Profile[]) {
+    try {
+      if (localDayHour(now, safeTz(p.timezone, "Asia/Kolkata")).hour !== 2) continue;
+      const { data: saved } = await admin.from("jobs").select("id, title, company").eq("user_id", p.id).eq("status", "saved").is("closed_at", null).order("updated_at", { ascending: false }).limit(30);
+      if (!saved?.length) continue;
+      const { data: apps } = await admin.from("applications").select("job_id, prepared_at").eq("user_id", p.id).in("job_id", saved.map((j) => j.id));
+      const ready = new Set((apps ?? []).filter((a) => a.prepared_at).map((a) => a.job_id));
+      const next = saved.find((j) => !ready.has(j.id));
+      if (!next) continue;
+      await preparePack(admin, { id: p.id, email: p.email }, next.id);
+      results[`overnight:${p.email ?? p.id}`] = [`prepared application for ${next.title}`];
+      await notify(p, {
+        kind: "application",
+        dedupeKey: `pack:${next.id}`,
+        title: `Application ready: ${next.title}${next.company ? ` · ${next.company}` : ""}`,
+        body: "Prepared overnight — check the AI drafts and the “Needs you” answers, then apply.",
+        url: `/jobs?job=${next.id}`,
+        push: { tag: "packs" },
+      }).catch(() => {});
+    } catch (e) {
+      console.warn("[tick] overnight pack skipped:", (e as Error).message);
+    }
   }
   // Housekeeping: the AI activity log keeps 30 days.
   await admin
