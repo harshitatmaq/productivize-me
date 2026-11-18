@@ -169,8 +169,20 @@ Setup for Windows, Oracle (Docker) and the Gmail label: [worker/README.md](worke
 
 **A fresh job board.** Postings that stop accepting applications leave the board automatically:
 - Greenhouse and Lever jobs are checked through their public job APIs (404 = closed), Ashby through its public job board, LinkedIn through its public logged-out job page ("No longer accepting applications"), and anything else by the page being gone or saying it's closed/expired/filled.
-- Each posting is re-checked about once a day (a few per scheduler tick, more on the worker, which can read LinkedIn pages that cloud servers often can't). **Search now** also clears expired ones.
+- Each posting is re-checked about once a day (a few per scheduler tick, more on the worker). **LinkedIn blocks cloud servers, so LinkedIn postings are checked only by the Scout worker** (and LinkedIn listings older than 21 days are archived even without it). A check that couldn't read the page is retried in ~3 hours instead of counting as checked; the job drawer says "still open · checked 2h ago" or why it isn't verified yet. When the worker reads a LinkedIn job it also saves the company's own application link. **Search now** also clears expired ones, and **It's closed** (⊘ on any card) removes one in a click.
 - Closed "new" jobs are archived off the board; closed saved jobs stay with a red "closed" badge so you can see what happened. "New" jobs older than 30 days are archived too (`JOBS_MAX_AGE_DAYS`).
+
+**Fit rules (before the AI).** Every posting is read for what it asks: years of experience ("2+ years", "3-5 years", "minimum 3 years"), level (the board's own field, e.g. Himalayas "Mid-level" or LinkedIn "Mid-Senior level", else the title) and countries a remote job is limited to. Against your profile (Jobs → Profile & Scout → years of experience, seniority, countries, work authorization):
+- **hidden:** asks 3+ more years than you have, Senior/Lead/Staff titles under 3 years, or remote only in countries you can't work in ("needs sponsorship" doesn't count as authorization);
+- **capped as a stretch (≤55):** asks 2 more years than you have, or mid-level under 2 years;
+- the AI is told the facts plainly ("Experience: 1 year in total", "asks 3+ years; only hires in United States") and sees longer descriptions;
+- the search plan uses entry-level titles and phrases ("Junior", "Associate", "SDE 1", "0-2 years") and excludes Senior/Lead titles when you have under 3 years;
+- changing your profile re-judges the jobs already on the board. Cards and the drawer show what each posting asks ("asks 1–3 yrs · junior level").
+- 👎 reasons act immediately: "Not this company" hides that company, "Too senior/junior" excludes the title word, "Location / remote" sets your country if missing.
+
+**Apply today.** At the top of Matches (and in Today's widget): the 5 strongest fits posted in the last 3 days, freshest first among equals — the first 24-48 hours are when an application is most likely to be seen. Matches also shows one card per company ("+2 more roles at …" expands it).
+
+**Get noticed (Apply tab).** How many of the posting's keywords your tailored resume (or profile) covers and which are missing, links to people on the team and recruiters at the company on LinkedIn (you browse; nothing is automated), and **Draft messages**: a referral ask, a note to the recruiter and a follow-up, written from your real profile.
 
 **Weekend deep search.** On Saturday and Sunday (from 9 AM your time) the first scheduled run of the day searches every source at once, with three times the web queries, more titles and twice as many jobs scored, then re-checks up to 60 open postings and removes expired ones. You get a summary notification ("Weekend job search: 14 new matches (3 strong) · removed 9 expired postings"), so the board is ready for the week.
 

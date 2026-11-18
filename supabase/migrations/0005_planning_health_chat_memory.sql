@@ -16,6 +16,8 @@
 --            answers), what you submitted, and a timeline per application
 --   Part 6 · Job freshness (expired / closed postings leave the board) and
 --            the learning map (topics per entry and how topics connect)
+--   Part 7 · Better job matching: what each posting requires (years,
+--            level, countries) and failed freshness checks retried sooner
 -- =============================================================================
 
 -- #############################################################################
@@ -722,4 +724,16 @@ create policy "own rows" on public.topic_links for all to authenticated
   with check (user_id = (select auth.uid()));
 grant select, insert, update, delete on public.topic_links to authenticated;
 grant all on public.topic_links to service_role;
+
+-- #############################################################################
+-- Part 7 · Better job matching
+-- #############################################################################
+
+-- What the posting asks for, read from its text and the job board's own fields:
+-- {"min_years": 3, "level": "mid", "restricted_to": ["United States"]}.
+alter table public.jobs add column if not exists requirements jsonb;
+-- A freshness check that couldn't read the posting (e.g. LinkedIn blocking a
+-- server) is retried after a few hours instead of counting as checked.
+alter table public.jobs add column if not exists check_failed_at timestamptz;
+alter table public.jobs add column if not exists check_note text;
 

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { chatJson } from "@/lib/ai/llm";
+import { describeRequirements } from "./fit-rules";
 import { candidateBrief } from "./profile";
 import type { JobProfile, RawJob, ScoredJob } from "./types";
 
@@ -25,6 +26,8 @@ Scoring rubric (be strict and calibrated):
  60-74  decent: worth a look, some notable gaps
  40-59  stretch: big gaps in seniority, skills or location
  0-39   poor fit or violates a deal-breaker / location / work-authorization constraint
+Hard limits: if a job's "requires" asks for more years than the candidate has plus one, score at most 55; if it only hires
+in countries the candidate can't work in, score at most 30. A role titled Senior/Lead/Staff is a poor fit for someone with under 3 years.
 Also extract clean fields from messy search results, and mark is_job_posting=false for anything that is not a single
 open job posting (list pages, articles, closed roles, courses).
 Return ONLY JSON: {"results":[{"i":0,"is_job_posting":true,"score":0-100,"verdict":"strong|good|stretch|poor",
@@ -69,7 +72,8 @@ export async function scoreJobs(
           posted: job.posted_at?.slice(0, 10),
           source: job.source,
           url: job.needs_extraction ? job.url : undefined,
-          text: (job.description ?? "").replace(/\s+/g, " ").slice(0, 1300),
+          requires: describeRequirements(job.requirements ?? {}),
+          text: (job.description ?? "").replace(/\s+/g, " ").slice(0, 1800),
         }),
       )
       .join("\n");

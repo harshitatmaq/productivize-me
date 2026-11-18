@@ -248,3 +248,15 @@ export function statusAfter(current: string, outcome: ReplyOutcome): string | nu
   if (next === "rejected") return current === "archived" ? null : next;
   return (RANK[next] ?? 0) > (RANK[current] ?? 0) ? next : null;
 }
+
+/** Which of the job's keywords your resume text already contains (whole-word, case-insensitive). */
+export function keywordCoverage(keywords: string[], text: string): { covered: string[]; missing: string[] } {
+  const hay = ` ${text.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ")} `;
+  const covered: string[] = [];
+  const missing: string[] = [];
+  for (const k of [...new Set(keywords.map((x) => x.trim()).filter(Boolean))]) {
+    const needle = k.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
+    (needle && hay.includes(` ${needle} `) ? covered : missing).push(k);
+  }
+  return { covered, missing };
+}

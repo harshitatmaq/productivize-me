@@ -191,6 +191,8 @@ const himalayas: JobSource = {
           company_logo: (j.companyLogo as string) ?? null,
           location: restrictions.length ? `Remote (${restrictions.join(", ")})` : "Remote (worldwide)",
           remote: true,
+          board_restrictions: restrictions,
+          board_level: Array.isArray(j.seniority) ? String((j.seniority as unknown[])[0] ?? "") || null : ((j.seniority as string) ?? null),
           employment_type: (j.employmentType as string) ?? null,
           salary: formatSalary(j.minSalary as number, j.maxSalary as number, j.currency as string, "year"),
           description: stripHtml((j.description as string) ?? (j.excerpt as string)),

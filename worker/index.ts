@@ -117,7 +117,7 @@ async function searchTick() {
       // can read LinkedIn's public job pages, which often block cloud servers).
       try {
         const sw = await sweepJobs(supabaseAdmin(), p.id, { limit: 10, recheckHours: 24 });
-        if (sw.closed || sw.stale || ONCE) log(`${p.email}: freshness · checked ${sw.checked}, removed ${sw.closed} closed, ${sw.stale} old`);
+        if (sw.closed || sw.stale || sw.unfit || ONCE) log(`${p.email}: freshness · checked ${sw.checked}, removed ${sw.closed} closed, ${sw.stale} old, ${sw.unfit} not fitting${sw.unverified ? `, ${sw.unverified} unverified` : ""}`);
       } catch (e) {
         log(`${p.email}: freshness check failed:`, (e as Error).message);
       }

@@ -124,7 +124,7 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
             <Field label="Current title">
               <Input value={p.current_title ?? ""} onChange={(e) => set("current_title", e.target.value)} />
             </Field>
-            <Field label="Years of experience">
+            <Field label="Years of experience" hint="Scout hides roles asking for 3+ more years than this, and Senior/Lead titles under 3 years">
               <Input type="number" min={0} step={0.5} value={p.years_experience ?? ""} onChange={(e) => set("years_experience", e.target.value ? Number(e.target.value) : undefined)} />
             </Field>
           </div>

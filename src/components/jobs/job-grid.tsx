@@ -13,7 +13,7 @@ const PAGE = 40;
  * Job cards that animate in as Scout finds them (Realtime inserts get a brief
  * accent glow) and paginate so long lists stay fast on phones.
  */
-export function JobGrid({ jobs, onOpen, pageSize = PAGE }: { jobs: Job[]; onOpen: (j: Job) => void; pageSize?: number }) {
+export function JobGrid({ jobs, onOpen, pageSize = PAGE, moreFor, onMore }: { jobs: Job[]; onOpen: (j: Job) => void; pageSize?: number; moreFor?: (j: Job) => number; onMore?: (j: Job) => void }) {
   const [limit, setLimit] = useState(pageSize);
   const arrived = useArrivedJobs();
   const shown = jobs.slice(0, limit);
@@ -33,7 +33,7 @@ export function JobGrid({ jobs, onOpen, pageSize = PAGE }: { jobs: Job[]; onOpen
                 transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 className={cn("relative rounded-xl", fresh && "live-arrival")}
               >
-                <JobCard job={j} onOpen={() => onOpen(j)} />
+                <JobCard job={j} onOpen={() => onOpen(j)} more={moreFor?.(j) ?? 0} onMore={onMore ? () => onMore(j) : undefined} />
               </motion.div>
             );
           })}

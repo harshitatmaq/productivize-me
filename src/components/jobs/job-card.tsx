@@ -6,9 +6,9 @@ import { Tip } from "@/components/ui/menu";
 import type { Job } from "@/lib/types";
 import { openShare, shareJob } from "@/lib/share";
 import { cn, timeAgo } from "@/lib/utils";
-import { CompanyLogo, ScoreBadge, sourceLabel } from "./job-bits";
+import { CompanyLogo, MarkClosedButton, requirementsLabel, ScoreBadge, sourceLabel } from "./job-bits";
 
-export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
+export function JobCard({ job, onOpen, more = 0, onMore }: { job: Job; onOpen: () => void; more?: number; onMore?: () => void }) {
   const fresh = !job.seen_at && job.status === "new";
 
   return (
@@ -62,6 +62,7 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" /> {timeAgo(job.posted_at ?? job.created_at)}
             </span>
+            {requirementsLabel(job) ? <span className="text-faint">{requirementsLabel(job)}</span> : null}
           </div>
 
           {job.reasons?.length ? (
@@ -82,9 +83,23 @@ export function JobCard({ job, onOpen }: { job: Job; onOpen: () => void }) {
             </div>
           ) : null}
           <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="truncate text-[11px] text-faint">{sourceLabel(job.source)}</span>
+            {more > 0 && onMore ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMore();
+                }}
+                className="truncate text-[11.5px] font-medium text-accent hover:underline"
+              >
+                +{more} more role{more > 1 ? "s" : ""} at {job.company}
+              </button>
+            ) : (
+              <span className="truncate text-[11px] text-faint">{sourceLabel(job.source)}</span>
+            )}
             <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
               <JobFeedback job={job} />
+              <MarkClosedButton job={job} />
               <Tip content="Share to…">
                 <button
                   onClick={() => openShare(shareJob(job))}

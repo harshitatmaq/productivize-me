@@ -17,7 +17,9 @@ import { JobDrawer } from "./job-drawer";
 import { JobGrid } from "./job-grid";
 import { LiveRun } from "./live-run";
 import type { JobProfile } from "@/lib/jobs/types";
+import { companyKey, groupByCompany } from "@/lib/jobs/board";
 import { AnswerBank } from "./answer-bank";
+import { ApplyToday } from "./apply-today";
 import { ProfileEditor } from "./profile-editor";
 import { ScoutChat } from "./scout-chat";
 import { SearchPanel } from "./search-panel";
@@ -73,6 +75,10 @@ export function JobsView() {
           : b.created_at.localeCompare(a.created_at),
       );
   }, [jobs, q, minScore, remoteOnly, sort, view]);
+
+  // One card per company; "+N more roles" expands it.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const grouped = useMemo(() => groupByCompany(filtered, expanded), [filtered, expanded]);
 
   const tracked = jobs.filter((j) => ["saved", "applied", "interviewing", "offer", "rejected"].includes(j.status));
   const counts = {
@@ -206,6 +212,7 @@ export function JobsView() {
               />
             </div>
             <AnimatePresence>{liveRun ? <LiveRun run={liveRun} found={liveFound} className="mb-4" /> : null}</AnimatePresence>
+            {view === "new" && !q.trim() ? <ApplyToday jobs={jobs} onOpen={setOpen} /> : null}
             {isLoading ? (
               <div className="grid gap-3 md:grid-cols-2">
                 {[0, 1, 2, 3].map((i) => (
@@ -219,7 +226,13 @@ export function JobsView() {
                   : "The first search is running or scheduled. Hit “Search now” to run one immediately."}
               </EmptyState>
             ) : (
-              <JobGrid key={`${view}-${minScore}-${sort}-${remoteOnly}`} jobs={filtered} onOpen={setOpen} />
+              <JobGrid
+                key={`${view}-${minScore}-${sort}-${remoteOnly}`}
+                jobs={grouped.shown}
+                onOpen={setOpen}
+                moreFor={(j) => (expanded.has(companyKey(j.company)) ? 0 : (grouped.more.get(companyKey(j.company)) ?? 0))}
+                onMore={(j) => setExpanded((e) => new Set(e).add(companyKey(j.company)))}
+              />
             )}
           </>
         )
