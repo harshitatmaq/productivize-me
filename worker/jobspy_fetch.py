@@ -27,7 +27,7 @@ def main() -> int:
             hours_old=req.get("hours_old"),
             country_indeed=req.get("country_indeed") or "india",
             description_format="markdown",
-            linkedin_fetch_description=False,
+            linkedin_fetch_description=False,  # renamed fetch_description in JobSpy 2.0; the worker reads LinkedIn pages itself
             verbose=0,
         )
         records = json.loads(df.to_json(orient="records", date_format="iso")) if len(df) else []

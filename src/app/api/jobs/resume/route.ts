@@ -4,6 +4,7 @@ import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
 import type { JobAnalysis, JobProfile, ResumeData } from "@/lib/jobs/types";
 import { normalizePortfolio, portfolioFromProfile, type PortfolioData } from "@/lib/portfolio";
+import { postingText } from "@/lib/jobs/integrity";
 
 export const maxDuration = 120;
 
@@ -84,7 +85,7 @@ Return ONLY JSON with the same shape as the input resume (name, headline, contac
             },
             {
               role: "user",
-              content: `RESUME\n${JSON.stringify(base)}\n\nEXTRA CONTEXT FROM THEIR ORIGINAL RESUME\n${(jp?.resume_text ?? "").slice(0, 5000)}\n\nTARGET JOB: ${job.title} @ ${job.company ?? ""}\n${(job.description ?? "").slice(0, 6000)}\n\n${
+              content: `RESUME\n${JSON.stringify(base)}\n\nEXTRA CONTEXT FROM THEIR ORIGINAL RESUME\n${(jp?.resume_text ?? "").slice(0, 5000)}\n\nTARGET JOB: ${job.title} @ ${job.company ?? ""}\n${postingText(job.description).slice(0, 6000)}\n\n${
                 analysis ? `ANALYSIS\nKeywords: ${analysis.keywords.join(", ")}\nSuggested bullets: ${analysis.resume_bullets.join(" | ")}` : ""
               }`,
             },

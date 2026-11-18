@@ -4,6 +4,7 @@
  * Pure: built in the browser from data you already have, no AI call.
  */
 import type { JobAnalysis, JobProfile } from "./types";
+import { postingText } from "@/lib/jobs/integrity";
 
 export const isStretch = (score: number | null | undefined) => score != null && score >= 40 && score < 70;
 
@@ -20,7 +21,7 @@ export function stretchPrompt(input: {
     .join("\n");
   const parts = [
     `I'm applying for a role that's a bit of a stretch for me. Please rewrite my resume for it, honestly.`,
-    `## The job\n${job.title}${job.company ? ` at ${job.company}` : ""}${job.location ? ` (${job.location})` : ""}\n${job.url}\n\n${(job.description ?? "").replace(/\s+\n/g, "\n").slice(0, 7000) || "(Open the link for the full description.)"}`,
+    `## The job\n${job.title}${job.company ? ` at ${job.company}` : ""}${job.location ? ` (${job.location})` : ""}\n${job.url}\n\n${postingText(job.description).replace(/\s+\n/g, "\n").slice(0, 7000) || "(Open the link for the full description.)"}`,
     `## About me\n${[profile.headline, profile.current_title && `Current title: ${profile.current_title}`, profile.years_experience != null && `${profile.years_experience} years of experience`, profile.skills?.length && `Skills: ${profile.skills.join(", ")}`, profile.tools?.length && `Tools: ${profile.tools.join(", ")}`, profile.domains?.length && `Domains: ${profile.domains.join(", ")}`]
       .filter(Boolean)
       .join("\n")}${exp ? `\n\nExperience:\n${exp}` : ""}${profile.education?.length ? `\n\nEducation: ${profile.education.map((e) => `${e.degree}, ${e.school}${e.year ? ` (${e.year})` : ""}`).join("; ")}` : ""}${profile.certifications?.length ? `\nCertifications: ${profile.certifications.join(", ")}` : ""}`,

@@ -183,6 +183,8 @@ export type Job = {
   check_note?: string | null;
   /** What the posting asks for (years, level, countries). */
   requirements?: import("@/lib/jobs/fit-rules").Requirements | null;
+  /** Match breakdown, deal-breaker hit, hidden AI text removed, reposts. */
+  signals?: import("@/lib/jobs/types").JobSignals | null;
   /** Set when the job was found by a "Search & ask Scout" query. */
   search_id: string | null;
   created_at: string;

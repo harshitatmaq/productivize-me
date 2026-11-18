@@ -7,16 +7,18 @@ import { notify, type NotifyProfile } from "@/lib/notify";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { discoverBoards, type DiscoveryLog } from "./discover";
 import { fetchFullDescription } from "./enrich";
-import { dedupeKey, detectAts, domainOf, hash, normalizeUrl, relevance } from "./normalize";
+import { dedupeKey, detectAts, domainOf, hash, legacyDedupeKey, normalizeUrl, relevance } from "./normalize";
+import { cleanPosting } from "./integrity";
+import { repostOf } from "./reposts";
 import { applyInterestsToPlan, interestBonus, interestContext, matchInterests, type InterestRow } from "@/lib/memory/interests";
 import { buildSearchPlan } from "./profile";
 import { feedbackContext, semanticRank, type Candidate } from "./rank";
 import { scoreJobs } from "./scoring";
 import { fitGate } from "./fit-rules";
 import { isDeepSearchTime, localDayHour } from "./liveness";
-import { sweepJobs } from "./liveness-run";
+import { fetchLinkedinDetails, sweepJobs } from "./liveness-run";
 import { JOB_SOURCES, type JobSource } from "./sources";
-import type { JobProfile, RawJob, SearchPlan, WatchCompany } from "./types";
+import type { JobProfile, JobSignals, RawJob, SearchPlan, WatchCompany } from "./types";
 
 export type RunStats = {
   sources: Record<string, { fetched: number; error?: string; skipped?: string; running?: boolean }>;
@@ -265,30 +267,69 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     );
     stats.fetched = all.length;
 
-    // 5. Normalise + de-duplicate within this batch.
-    const byKey = new Map<string, RawJob & { url_hash: string; dedupe_key: string }>();
+    // 5. Normalise + de-duplicate within this batch (same company + same role = one job).
+    //    Descriptions are cleaned of text aimed at AI tools before anything reads them.
+    type Item = RawJob & { url_hash: string; dedupe_key: string; legacy_key: string };
+    const byKey = new Map<string, Item>();
+    let hiddenText = 0;
     for (const j of all) {
       if (!j.url || !j.title) continue;
       const url = normalizeUrl(j.url);
-      const item = { ...j, url, url_hash: hash(url), dedupe_key: dedupeKey({ ...j, url }) };
-      if (!byKey.has(item.dedupe_key)) byKey.set(item.dedupe_key, item);
+      const item: Item = { ...j, url, url_hash: hash(url), dedupe_key: dedupeKey({ ...j, url }), legacy_key: legacyDedupeKey({ ...j, url }) };
+      if (byKey.has(item.dedupe_key)) continue;
+      const clean = cleanPosting(item.description);
+      if (clean.removed.length) {
+        item.description = clean.text;
+        item.signals = { ...item.signals, hidden_text: clean.removed };
+        hiddenText++;
+      }
+      byKey.set(item.dedupe_key, item);
     }
     const unique = [...byKey.values()];
     stats.unique = unique.length;
+    if (hiddenText) log(`removed text aimed at AI tools from ${hiddenText} posting${hiddenText === 1 ? "" : "s"}`);
 
-    // 6. Drop anything already stored for this user.
+    // 6. Drop anything already stored for this user (matching the old key format too).
+    //    The same company posting the same role again under a new link is counted as a repost.
     const known = new Set<string>();
+    type Stored = { id: string; url: string; dedupe_key: string; signals?: JobSignals | null };
+    const storedByKey = new Map<string, Stored>();
+    let repostTracking = true;
     for (let i = 0; i < unique.length; i += 200) {
       const chunk = unique.slice(i, i + 200);
-      const [{ data: a }, { data: b }] = await Promise.all([
-        admin.from("jobs").select("url_hash").eq("user_id", userId).in("url_hash", chunk.map((j) => j.url_hash)),
-        admin.from("jobs").select("dedupe_key").eq("user_id", userId).in("dedupe_key", chunk.map((j) => j.dedupe_key)),
-      ]);
+      const keys = [...new Set(chunk.flatMap((j) => [j.dedupe_key, j.legacy_key]))];
+      const byUrl = admin.from("jobs").select("url_hash").eq("user_id", userId).in("url_hash", chunk.map((j) => j.url_hash));
+      const sameKey = (cols: string) => admin.from("jobs").select(cols).eq("user_id", userId).in("dedupe_key", keys);
+      const [{ data: a }, first] = await Promise.all([byUrl, sameKey("id, url, dedupe_key, signals")]);
+      let b = first.data as unknown as Stored[] | null;
+      if (first.error) {
+        // Database without part 8 of the 0005 migration yet (no signals column).
+        repostTracking = false;
+        b = (await sameKey("id, url, dedupe_key")).data as unknown as Stored[] | null;
+      }
       a?.forEach((r) => known.add(`u:${r.url_hash}`));
-      b?.forEach((r) => known.add(`d:${r.dedupe_key}`));
+      b?.forEach((r) => {
+        known.add(`d:${r.dedupe_key}`);
+        storedByKey.set(r.dedupe_key, r);
+      });
     }
-    const fresh = unique.filter((j) => !known.has(`u:${j.url_hash}`) && !known.has(`d:${j.dedupe_key}`));
+    const isKnown = (j: Item) => known.has(`u:${j.url_hash}`) || known.has(`d:${j.dedupe_key}`) || known.has(`d:${j.legacy_key}`);
+    const fresh = unique.filter((j) => !isKnown(j));
     stats.fresh = fresh.length;
+    if (repostTracking) {
+      let reposts = 0;
+      for (const j of unique) {
+        if (known.has(`u:${j.url_hash}`)) continue;
+        const stored = storedByKey.get(j.dedupe_key) ?? storedByKey.get(j.legacy_key);
+        if (!stored) continue;
+        const signals = repostOf(stored, j.url, j.url_hash, new Date().toISOString());
+        if (!signals) continue;
+        stored.signals = signals;
+        await admin.from("jobs").update({ signals }).eq("id", stored.id);
+        reposts++;
+      }
+      if (reposts) log(`${reposts} job${reposts === 1 ? " was" : "s were"} posted again under new links (repost count updated)`);
+    }
 
     // 7. Keyword pre-filter → semantic re-rank (embeddings + 👍/👎) → full descriptions → LLM scoring.
     stats.stage = "Ranking and scoring";
@@ -312,6 +353,38 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
       .filter((x) => x.rel >= minRel * 0.6)
       .sort((a, b) => b.rel - a.rel)
       .slice(0, 120);
+    // LinkedIn listings come without a description. On the worker, read the full public page
+    // for the ones that passed the keyword filter, then apply the fit rules again.
+    if (isWorkerProcess()) {
+      const max = envInt("JOBS_LINKEDIN_DETAILS_PER_RUN", deep ? 30 : 15);
+      const bare = keywordPool.filter((c) => /linkedin\.com/i.test(c.job.url) && (c.job.description ?? "").length < 300).slice(0, max);
+      let read = 0;
+      let blocked = 0;
+      for (const c of bare) {
+        const d = await fetchLinkedinDetails(c.job.url);
+        if (d === "rate-limited") {
+          log("LinkedIn rate-limited the worker; reading the rest next run");
+          break;
+        }
+        if (!d?.description) continue;
+        read++;
+        const clean = cleanPosting(d.description);
+        c.job.description = clean.text;
+        if (clean.removed.length) c.job.signals = { ...c.job.signals, hidden_text: clean.removed };
+        if (d.level) c.job.board_level = d.level;
+        if (d.employmentType && !c.job.employment_type) c.job.employment_type = d.employmentType;
+        if (d.applyUrl && !c.job.apply_url) c.job.apply_url = d.applyUrl;
+        const gate = fitGate(c.job, profile);
+        c.job.requirements = gate.requirements;
+        if (gate.verdict === "block") {
+          c.rel = -1;
+          blocked++;
+        }
+        await new Promise((r) => setTimeout(r, 700)); // stay well under LinkedIn's burst limit
+      }
+      if (read) log(`read ${read} full LinkedIn description${read === 1 ? "" : "s"}${blocked ? `; ${blocked} didn't fit after all` : ""}`);
+      for (let i = keywordPool.length - 1; i >= 0; i--) if (keywordPool[i].rel < 0) keywordPool.splice(i, 1);
+    }
     const { ranked: reranked, model: embeddingModel } = await semanticRank(admin, userId, profile, jp?.profile_embedding ?? null, keywordPool, log);
     const ranked = reranked.filter((x) => x.rel >= minRel).slice(0, maxScore);
 
@@ -323,7 +396,9 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
         toEnrich.slice(i, i + 4).map(async (c) => {
           const full = await fetchFullDescription(c.job.apply_url || c.job.url);
           if (full && full.length > (c.job.description ?? "").length) {
-            c.job.description = full;
+            const clean = cleanPosting(full);
+            c.job.description = clean.text;
+            if (clean.removed.length) c.job.signals = { ...c.job.signals, hidden_text: clean.removed };
             enriched++;
           }
         }),
@@ -390,16 +465,17 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
           embedding_model: c?.vector ? (embeddingModel ?? null) : null,
           semantic_score: c?.semantic ?? null,
           requirements: j.requirements && Object.keys(j.requirements).length ? j.requirements : null,
+          signals: j.signals && Object.keys(j.signals).length ? j.signals : null,
         };
       });
-      let { data: inserted, error } = await admin
-        .from("jobs")
-        .upsert(rows, { onConflict: "user_id,url_hash", ignoreDuplicates: true })
-        .select("id, title, company, score");
-      if (error && /requirements/.test(error.message)) {
-        // Database without part 7 of the 0005 migration yet: save without requirements.
-        for (const r of rows) delete (r as { requirements?: unknown }).requirements;
-        ({ data: inserted, error } = await admin.from("jobs").upsert(rows, { onConflict: "user_id,url_hash", ignoreDuplicates: true }).select("id, title, company, score"));
+      const upsert = () => admin.from("jobs").upsert(rows, { onConflict: "user_id,url_hash", ignoreDuplicates: true }).select("id, title, company, score");
+      let { data: inserted, error } = await upsert();
+      // Database without parts 7/8 of the 0005 migration yet: save without those columns.
+      for (const col of ["signals", "requirements"] as const) {
+        if (error && error.message.includes(col)) {
+          for (const r of rows) delete (r as Record<string, unknown>)[col];
+          ({ data: inserted, error } = await upsert());
+        }
       }
       let ok: { id: string; title: string; company: string | null; score: number }[] = inserted ?? [];
       if (error) {

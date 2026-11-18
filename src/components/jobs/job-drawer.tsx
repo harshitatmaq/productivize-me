@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, Copy, ExternalLink, Lightbulb, MapPin, Share2, Sparkles, Trash2, Wallet, Wifi } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink, Lightbulb, MapPin, Share2, ShieldAlert, Sparkles, Trash2, Wallet, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useResettableState } from "@/lib/hooks";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { useDeleteJob, useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { api, cn, timeAgo } from "@/lib/utils";
 import type { JobAnalysis } from "@/lib/jobs/types";
-import { CompanyLogo, MarkClosedButton, requirementsLabel, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
+import { CompanyLogo, FitBreakdown, MarkClosedButton, RepostBadge, requirementsLabel, ScoreBadge, sourceLabel, STATUS_META, WatchCompanyButton } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
 import { ApplyPanel } from "./apply-panel";
 import { StretchCard } from "./stretch-card";
@@ -144,6 +144,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
           </Badge>
         ) : null}
         {requirementsLabel(job) ? <Badge>{requirementsLabel(job)}</Badge> : null}
+        <RepostBadge job={job} />
         {!job.closed_at ? (
           <span className="text-faint">
             {job.checked_at ? `still open · checked ${timeAgo(job.checked_at)}` : job.check_note ? `not verified yet (${job.check_note.toLowerCase()})` : "not checked yet"}
@@ -170,6 +171,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
         <span className="text-faint">
           {sourceLabel(job.source)} · {timeAgo(job.posted_at ?? job.created_at)}
         </span>
+        <WatchCompanyButton job={job} />
       </div>
 
       <Segmented
@@ -186,6 +188,26 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
 
       {tab === "overview" ? (
         <div className="space-y-5">
+          {job.signals?.fit ? (
+            <section>
+              <h4 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted">Match breakdown</h4>
+              <FitBreakdown job={job} />
+            </section>
+          ) : null}
+          {job.signals?.hidden_text?.length ? (
+            <div className="rounded-lg border border-warning/35 bg-warning/[0.06] p-3 text-[12.5px] leading-relaxed text-fg-2">
+              <div className="mb-1 flex items-center gap-1.5 font-medium text-fg">
+                <ShieldAlert className="h-3.5 w-3.5 text-warning" /> This posting had text aimed at AI tools
+              </div>
+              Removed before the AI read it, so your score and drafts aren&apos;t affected. Some companies plant lines like this to spot
+              AI-written applications — write the final answers in your own words.
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[12px] text-muted">
+                {job.signals.hidden_text.slice(0, 3).map((t, i) => (
+                  <li key={i} className="break-words">“{t}”</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {job.reasons?.length ? (
             <section>
               <h4 className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted">Why it fits</h4>

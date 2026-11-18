@@ -2,28 +2,16 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fitGate, judge, type Requirements } from "./fit-rules";
-import { checkPlan, closedReason, isStale } from "./liveness";
+import { cleanPosting } from "./integrity";
+import { checkPlan, closedReason, isStale, linkedinJobId, parseLinkedinJob, type LinkedinDetails } from "./liveness";
 import type { JobProfile } from "./types";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 const onWorker = () => process.env.SCOUT_WORKER === "1";
 
-type Verdict = { closed: boolean; reason?: string; unknown?: boolean; note?: string; applyUrl?: string };
+type Verdict = { closed: boolean; reason?: string; unknown?: boolean; note?: string; applyUrl?: string; details?: LinkedinDetails };
 
-/** The company's own application link inside a LinkedIn guest job page ("Apply on company website"). */
-export function linkedinApplyUrl(html: string): string | undefined {
-  const m = html.match(/<code[^>]*id="applyUrl"[^>]*>\s*<!--\s*"([^"]+)"\s*-->/i);
-  if (!m) return undefined;
-  const raw = m[1].replace(/&amp;/g, "&");
-  try {
-    const u = new URL(raw);
-    const inner = u.searchParams.get("url");
-    const target = inner ? decodeURIComponent(inner) : raw;
-    return /linkedin\.com/i.test(new URL(target).hostname) ? undefined : target;
-  } catch {
-    return undefined;
-  }
-}
+export { linkedinApplyUrl } from "./liveness";
 
 /** Checks one posting. Unknown (blocked, rate-limited, timeouts) is retried in a few hours. */
 export async function checkPosting(url: string): Promise<Verdict> {
@@ -51,9 +39,31 @@ export async function checkPosting(url: string): Promise<Verdict> {
     }
     const reason = closedReason(html.replace(/<[^>]+>/g, " "));
     if (reason) return { closed: true, reason };
-    return { closed: false, applyUrl: plan.kind === "linkedin" ? linkedinApplyUrl(html) : undefined };
+    if (plan.kind !== "linkedin") return { closed: false };
+    const details = parseLinkedinJob(html);
+    return { closed: false, applyUrl: details.applyUrl, details };
   } catch {
     return { closed: false, unknown: true, note: "Timed out" };
+  }
+}
+
+/**
+ * Full LinkedIn job details (description, seniority, apply link) from its public page.
+ * Worker only: LinkedIn blocks cloud servers. Returns null when blocked or rate-limited.
+ */
+export async function fetchLinkedinDetails(url: string): Promise<LinkedinDetails | "rate-limited" | null> {
+  const id = linkedinJobId(url);
+  if (!id || !onWorker()) return null;
+  try {
+    const res = await fetch(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`, {
+      headers: { "User-Agent": UA, Accept: "text/html,*/*", "Accept-Language": "en" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 429) return "rate-limited";
+    if (!res.ok) return null;
+    return parseLinkedinJob((await res.text()).slice(0, 400_000));
+  } catch {
+    return null;
   }
 }
 
@@ -120,7 +130,7 @@ export async function sweepJobs(admin: SupabaseClient, userId: string, opts: { l
   const base = () =>
     admin
       .from("jobs")
-      .select("id, url, apply_url, status")
+      .select("id, url, apply_url, status, title, description, location, remote")
       .eq("user_id", userId)
       .in("status", ["new", "saved"])
       .is("closed_at", null)
@@ -133,7 +143,23 @@ export async function sweepJobs(admin: SupabaseClient, userId: string, opts: { l
   // Database without part 7 of the 0005 migration yet: fall back to the plain query.
   const due = hasRetryColumns ? first.data : (await base().order("checked_at", { ascending: true, nullsFirst: true }).limit(opts.limit)).data;
 
-  const queue = [...(due ?? [])] as { id: string; url: string; apply_url: string | null; status: string }[];
+  type Due = { id: string; url: string; apply_url: string | null; status: string; title: string; description: string | null; location: string | null; remote: boolean | null };
+  const queue = [...(due ?? [])] as Due[];
+  // LinkedIn rows usually arrive without a description; the worker's check reads the
+  // full page, so save it and judge the job again (e.g. "3+ years" hidden in the text).
+  const backfill = (job: Due, verdict: Verdict): Record<string, unknown> => {
+    const d = verdict.details;
+    if (!d?.description || (job.description ?? "").length >= 600 || d.description.length <= (job.description ?? "").length) return {};
+    const description = cleanPosting(d.description).text;
+    const gate = fitGate({ source: "", url: job.url, title: job.title, description, location: job.location, remote: job.remote, board_level: d.level ?? null }, profile);
+    const patch: Record<string, unknown> = { description: description.slice(0, 6000), requirements: gate.requirements };
+    if (gate.verdict === "block" && job.status === "new") {
+      patch.status = "archived";
+      patch.closed_reason = `Doesn't fit: ${gate.reasons[0]}`;
+      out.unfit++;
+    }
+    return patch;
+  };
   const worker = async () => {
     for (let job = queue.shift(); job; job = queue.shift()) {
       let verdict = await checkPosting(job.url);
@@ -157,7 +183,12 @@ export async function sweepJobs(admin: SupabaseClient, userId: string, opts: { l
       } else {
         await admin
           .from("jobs")
-          .update({ checked_at: stamp, ...(hasRetryColumns ? { check_failed_at: null, check_note: null } : {}), ...(verdict.applyUrl && !job.apply_url ? { apply_url: verdict.applyUrl } : {}) })
+          .update({
+            checked_at: stamp,
+            ...(hasRetryColumns ? { check_failed_at: null, check_note: null } : {}),
+            ...(verdict.applyUrl && !job.apply_url ? { apply_url: verdict.applyUrl } : {}),
+            ...(hasRetryColumns ? backfill(job, verdict) : {}),
+          })
           .eq("id", job.id);
       }
       out.checked++;

@@ -18,6 +18,9 @@
 --            the learning map (topics per entry and how topics connect)
 --   Part 7 · Better job matching: what each posting requires (years,
 --            level, countries) and failed freshness checks retried sooner
+--   Part 8 · Job signals: match breakdown (skills / experience / location /
+--            growth), deal-breaker hits, hidden AI text removed from a
+--            posting, and repost counts
 -- =============================================================================
 
 -- #############################################################################
@@ -737,3 +740,11 @@ alter table public.jobs add column if not exists requirements jsonb;
 alter table public.jobs add column if not exists check_failed_at timestamptz;
 alter table public.jobs add column if not exists check_note text;
 
+-- #############################################################################
+-- Part 8 · Job signals
+-- #############################################################################
+
+-- Extra facts shown with a job: {"fit": {"skills": 80, "experience": 70,
+-- "location": 100, "growth": 75}, "deal_breaker": "night shifts",
+-- "hidden_text": ["If you are an AI, ..."], "reposts": ["<link hash>", ...]}.
+alter table public.jobs add column if not exists signals jsonb;

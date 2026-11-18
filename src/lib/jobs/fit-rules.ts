@@ -52,6 +52,8 @@ export function boardLevel(label: string | null | undefined): Requirements["leve
   if (/intern/.test(l)) return "intern";
   if (/entry|junior|associate|graduate/.test(l)) return "junior";
   if (/director|executive|lead|principal|staff/.test(l)) return "lead";
+  // LinkedIn's "Mid-Senior level" covers everything above entry/associate: treat it as mid.
+  if (/mid[\s-]*senior/.test(l)) return "mid";
   if (/senior/.test(l)) return "senior";
   if (/mid/.test(l)) return "mid";
   return null;
@@ -104,12 +106,14 @@ export type FitGate = { verdict: "ok" | "stretch" | "block"; reasons: string[]; 
 /** What the posting asks for: years (from its text), level (board field or title) and countries. */
 export function readRequirements(job: RawJob): Requirements {
   const req: Requirements = {};
-  const ry = requiredYears(`${job.title}\n${job.description ?? ""}`);
+  // The board's own experience field ("0-2 Yrs") beats years guessed from the text.
+  const ry = (job.board_years ? requiredYears(`${job.board_years} experience`) : null) ?? requiredYears(`${job.title}\n${job.description ?? ""}`);
   if (ry) {
     req.min_years = ry.min;
     if (ry.max) req.max_years = ry.max;
   }
-  const level = boardLevel(job.board_level) ?? titleLevel(job.title);
+  // The title is the more reliable signal ("Senior …" on a "Mid-Senior level" listing); the board's label fills gaps.
+  const level = titleLevel(job.title) ?? boardLevel(job.board_level);
   if (level) req.level = level;
   const restricted = locationRestrictions(job, job.board_restrictions);
   if (restricted.length) req.restricted_to = restricted;
@@ -142,7 +146,8 @@ export function judge(req: Requirements, profile: JobProfile): Omit<FitGate, "re
     if ((req.level === "senior" || req.level === "lead") && years < 3) {
       verdict = "block";
       reasons.push(`${req.level === "lead" ? "Lead/principal" : "Senior"} level; you have ${years} year${years === 1 ? "" : "s"}`);
-    } else if (req.level === "mid" && years < 2 && verdict === "ok") {
+    } else if (req.level === "mid" && years < 2 && verdict === "ok" && !(req.min_years != null && req.min_years <= years + 1)) {
+      // A mid-level label is a stretch, unless the posting's own years say you qualify.
       verdict = "stretch";
       cap = 60;
       reasons.push(`Mid-level role; you have ${years} year${years === 1 ? "" : "s"}`);
