@@ -77,10 +77,14 @@ export type RawJob = {
   needs_extraction?: boolean;
   /** The job board's own level label ("Mid-level", "Entry level"), when it gives one. */
   board_level?: string | null;
+  /** The job board's own experience field ("0-2 Yrs" on Naukri). */
+  board_years?: string | null;
   /** Countries/regions a remote job is limited to, from the board's own field. */
   board_restrictions?: string[];
   /** What the posting asks for (set by the fit rules). */
   requirements?: import("./fit-rules").Requirements;
+  /** Sub-scores and flags the app shows with the job (stored in jobs.signals). */
+  signals?: JobSignals;
 };
 
 export type ScoredJob = RawJob & {
@@ -89,6 +93,19 @@ export type ScoredJob = RawJob & {
   reasons: string[];
   concerns: string[];
   seniority?: string | null;
+};
+
+/** Extra facts about a job, stored in jobs.signals. */
+export type JobSignals = {
+  /** Sub-scores (0-100) behind the overall match. */
+  fit?: { skills: number; experience: number; location: number; growth: number };
+  /** The deal-breaker from your profile this job breaks. */
+  deal_breaker?: string;
+  /** Sentences addressed to AI tools that were removed from the description. */
+  hidden_text?: string[];
+  /** Hashes of other links where the same company posted the same role again. */
+  reposts?: string[];
+  reposted_at?: string;
 };
 
 export type WatchCompany = {

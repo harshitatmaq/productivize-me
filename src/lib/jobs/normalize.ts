@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { JobProfile, RawJob, SearchPlan, WatchCompany } from "./types";
+import type { JobProfile, RawJob, SearchPlan } from "./types";
 
 const TRACKING_PARAMS = /^(utm_|ref|refid|trk|trackingid|src|source|gh_src|lever-source|fbclid|gclid|mc_|campaign)/i;
 
@@ -35,7 +35,51 @@ export function slugify(s: string | null | undefined): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** Trailing words that don't tell companies apart: "Acme Technologies India" = "Acme". */
+const COMPANY_SUFFIX = new Set(["technologies", "technology", "tech", "solutions", "software", "labs", "systems", "services", "india", "global", "group", "consulting", "plc", "sa", "bv", "ag", "ai", "hq", "company"]);
+
+/** Company name for matching duplicates ("Acme Technologies Pvt Ltd" → "acme"). */
+export function companyNorm(company: string | null | undefined): string {
+  const words = slugify(company).split("-").filter(Boolean);
+  while (words.length > 1 && COMPANY_SUFFIX.has(words[words.length - 1])) words.pop();
+  return words.join("-");
+}
+
+const LOCATION_TAIL =
+  /(?:\s*[,|]\s*|\s+[-–—@/]\s+|\s+in\s+)(?:remote|hybrid|on-?site|onsite|wfh|work from home|india|bangalore|bengaluru|pune|hyderabad|mumbai|delhi|new delhi|ncr|gurgaon|gurugram|noida|chennai|kolkata|ahmedabad|kochi|jaipur|indore|chandigarh|apac|emea|us|usa|uk|europe|anywhere)\b.*$/i;
+
+const TITLE_PHRASES: [RegExp, string][] = [
+  [/\bsoftware (?:development|dev) engineer\b/g, "software engineer"],
+  [/\b(?:sde|swe)\b/g, "software engineer"],
+  [/\bsr\b/g, "senior"],
+  [/\bjr\b/g, "junior"],
+  [/\b(?:engg|engr)\b/g, "engineer"],
+  [/\bdev\b/g, "developer"],
+  [/\bml\b/g, "machine learning"],
+  [/\blevel (\d)\b/g, "$1"],
+  [/\bl([1-5])\b/g, "$1"],
+  [/\b(?:iii)\b/g, "3"],
+  [/\b(?:ii)\b/g, "2"],
+  [/\b(?:i)\b/g, "1"],
+];
+
+/** Job title for matching duplicates ("SDE-I (Remote)" = "Software Engineer 1" = "Software Development Engineer I - Bengaluru"). */
+export function titleNorm(title: string): string {
+  let t = title.replace(/\(.*?\)|\[.*?\]/g, " ").replace(LOCATION_TAIL, " ").toLowerCase().replace(/&/g, " and ");
+  t = t.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9+#]+/g, " ").trim();
+  for (const [re, to] of TITLE_PHRASES) t = t.replace(re, to);
+  return t.split(/\s+/).filter(Boolean).join("-");
+}
+
+/** Same company + same role (after normalising) = the same job, wherever it was found. */
 export function dedupeKey(job: Pick<RawJob, "title" | "company" | "url">): string {
+  const company = companyNorm(job.company);
+  if (!company) return `url:${hash(normalizeUrl(job.url))}`;
+  return `${company}|${titleNorm(job.title)}`;
+}
+
+/** The key format used before titles and company names were normalised (to match older rows). */
+export function legacyDedupeKey(job: Pick<RawJob, "title" | "company" | "url">): string {
   const company = slugify(job.company);
   const title = slugify(job.title.replace(/\(.*?\)|\[.*?\]/g, ""));
   if (!company) return `url:${hash(normalizeUrl(job.url))}`;
@@ -185,25 +229,7 @@ export function relevance(job: RawJob, plan: SearchPlan, profile: JobProfile): n
   return Math.round(score * 1000) / 1000;
 }
 
-export function parseWatchCompany(input: string): WatchCompany | null {
-  const s = input.trim();
-  const wd = s.match(/([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i);
-  if (wd) return { ats: "workday", slug: `${wd[1].toLowerCase()}/${wd[2]}`, name: wd[1].split(".")[0] };
-  const patterns: [RegExp, WatchCompany["ats"]][] = [
-    [/(?:job-)?boards(?:-api)?\.greenhouse\.io\/(?:v1\/boards\/)?([a-z0-9_-]+)/i, "greenhouse"],
-    [/jobs\.lever\.co\/([a-z0-9_-]+)/i, "lever"],
-    [/jobs\.ashbyhq\.com\/([a-z0-9_.-]+)/i, "ashby"],
-    [/apply\.workable\.com\/([a-z0-9_-]+)/i, "workable"],
-    [/(?:jobs|careers)\.smartrecruiters\.com\/([a-z0-9_-]+)/i, "smartrecruiters"],
-  ];
-  for (const [re, ats] of patterns) {
-    const m = s.match(re);
-    if (m) return { ats, slug: m[1], name: m[1] };
-  }
-  const short = s.match(/^(greenhouse|lever|ashby|workable|smartrecruiters)\s*[:/]\s*([a-z0-9_.-]+)$/i);
-  if (short) return { ats: short[1].toLowerCase() as WatchCompany["ats"], slug: short[2], name: short[2] };
-  return null;
-}
+export { parseWatchCompany } from "./ats-url";
 
 export function formatSalary(min?: number | null, max?: number | null, currency?: string | null, period?: string | null) {
   if (!min && !max) return null;

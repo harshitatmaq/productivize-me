@@ -4,6 +4,7 @@ import { handle, HttpError, requireUser } from "@/lib/auth";
 import { candidateBrief } from "@/lib/jobs/profile";
 import type { JobAnalysis, JobProfile } from "@/lib/jobs/types";
 import { readPage } from "@/lib/search/web";
+import { postingText } from "@/lib/jobs/integrity";
 
 export const maxDuration = 120;
 
@@ -24,10 +25,10 @@ export async function POST(request: Request) {
     if (!job) throw new HttpError(404, "Job not found");
     const profile = (jp?.profile as JobProfile) ?? {};
 
-    let description: string = job.description ?? "";
+    let description: string = postingText(job.description);
     if (description.length < 1500) {
       const page = await readPage(job.url, 10_000);
-      if (page && page.length > description.length) description = page;
+      if (page && page.length > description.length) description = postingText(page);
     }
 
     const { data, provider } = await chatJson<Omit<JobAnalysis, "generated_at">>(

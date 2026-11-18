@@ -6,7 +6,7 @@ import { Tip } from "@/components/ui/menu";
 import type { Job } from "@/lib/types";
 import { openShare, shareJob } from "@/lib/share";
 import { cn, timeAgo } from "@/lib/utils";
-import { CompanyLogo, MarkClosedButton, requirementsLabel, ScoreBadge, sourceLabel } from "./job-bits";
+import { CompanyLogo, MarkClosedButton, RepostBadge, requirementsLabel, ScoreBadge, sourceLabel } from "./job-bits";
 
 export function JobCard({ job, onOpen, more = 0, onMore }: { job: Job; onOpen: () => void; more?: number; onMore?: () => void }) {
   const fresh = !job.seen_at && job.status === "new";
@@ -28,6 +28,7 @@ export function JobCard({ job, onOpen, more = 0, onMore }: { job: Job; onOpen: (
               <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-muted">
                 <span className="truncate">{job.company ?? "Unknown company"}</span>
                 {fresh ? <span className="rounded bg-accent px-1 text-[10px] font-semibold uppercase tracking-wide text-white">new</span> : null}
+                <RepostBadge job={job} compact />
                 {job.closed_at ? (
                   <Tip content={`${job.closed_reason ?? "No longer accepting applications"} · checked ${timeAgo(job.closed_at)}`}>
                     <span className="rounded bg-danger/15 px-1 text-[10px] font-semibold uppercase tracking-wide text-danger">closed</span>

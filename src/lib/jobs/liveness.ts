@@ -9,6 +9,7 @@
  * - Anything else: the page is gone (404/410) or says the job is closed/expired.
  */
 import { parseGreenhouseUrl } from "./apply";
+import { stripHtml } from "./normalize";
 
 const CLOSED_TEXT: [RegExp, string][] = [
   [/no longer accepting applications/i, "No longer accepting applications"],
@@ -62,7 +63,7 @@ export function checkPlan(url: string): CheckPlan | null {
 }
 
 export function linkedinJobId(url: string): string | null {
-  const m = url.match(/linkedin\.com\/(?:[a-z]{2}\/)?jobs\/view\/(?:[^/?#]*?-)?(\d{6,})/i) ?? url.match(/[?&](?:currentJobId|jobId)=(\d{6,})/i);
+  const m = url.match(/linkedin\.com\/(?:[a-z]{2}\/|comm\/)?jobs\/view\/(?:[^/?#]*?-)?(\d{6,})/i) ?? url.match(/[?&](?:currentJobId|jobId)=(\d{6,})/i);
   return m ? m[1] : null;
 }
 
@@ -87,4 +88,42 @@ export function localDayHour(now: Date, tz: string): { weekday: number; hour: nu
 export function isDeepSearchTime(now: Date, tz: string): boolean {
   const { weekday, hour } = localDayHour(now, tz);
   return (weekday === 0 || weekday === 6) && hour >= 9;
+}
+
+/** The company's own application link inside a LinkedIn guest job page ("Apply on company website"). */
+export function linkedinApplyUrl(html: string): string | undefined {
+  const m = html.match(/<code[^>]*id="applyUrl"[^>]*>\s*<!--\s*"([^"]+)"\s*-->/i);
+  if (!m) return undefined;
+  const raw = m[1].replace(/&amp;/g, "&");
+  try {
+    const u = new URL(raw);
+    const inner = u.searchParams.get("url");
+    const target = inner ? decodeURIComponent(inner) : raw;
+    return /linkedin\.com/i.test(new URL(target).hostname) ? undefined : target;
+  } catch {
+    return undefined;
+  }
+}
+
+export type LinkedinDetails = { description?: string; level?: string; employmentType?: string; applyUrl?: string };
+
+/** Description, "Seniority level", "Employment type" and apply link from a LinkedIn guest job page. */
+export function parseLinkedinJob(html: string): LinkedinDetails {
+  const out: LinkedinDetails = {};
+  const start = html.search(/class="[^"]*show-more-less-html__markup/i);
+  if (start >= 0) {
+    const from = html.indexOf(">", start) + 1;
+    const rest = html.slice(from);
+    const end = rest.search(/class="[^"]*show-more-less-html__button|class="[^"]*description__job-criteria-list|<\/section>/i);
+    const text = stripHtml((end > 0 ? rest.slice(0, end) : rest.slice(0, 40_000)).replace(/<button[\s\S]*$/i, ""), 8000);
+    if (text.length > 40) out.description = text;
+  }
+  const criteria = [...html.matchAll(/job-criteria-subheader[^>]*>\s*([^<]+?)\s*<\/h3>\s*<span[^>]*>\s*([^<]+?)\s*<\/span>/gi)];
+  for (const [, label, value] of criteria) {
+    if (/seniority/i.test(label) && !/not applicable/i.test(value)) out.level = value.trim();
+    if (/employment type/i.test(label)) out.employmentType = value.trim();
+  }
+  const apply = linkedinApplyUrl(html);
+  if (apply) out.applyUrl = apply;
+  return out;
 }

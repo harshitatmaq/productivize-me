@@ -3,6 +3,7 @@ import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
 import { candidateBrief } from "@/lib/jobs/profile";
 import type { JobAnalysis, JobProfile } from "@/lib/jobs/types";
+import { postingText } from "@/lib/jobs/integrity";
 
 export const maxDuration = 60;
 
@@ -37,7 +38,7 @@ Return ONLY JSON: {"referral":"…","recruiter":"…","follow_up":"…"}`,
           },
           {
             role: "user",
-            content: `CANDIDATE\n${candidateBrief((jp?.profile ?? {}) as JobProfile)}\n\nJOB\n${job.title} at ${job.company ?? "the company"}\n${job.url}\n${analysis?.strengths?.length ? `Strengths for this role: ${analysis.strengths.join("; ")}\n` : ""}${String(job.description ?? "").slice(0, 2500)}`,
+            content: `CANDIDATE\n${candidateBrief((jp?.profile ?? {}) as JobProfile)}\n\nJOB\n${job.title} at ${job.company ?? "the company"}\n${job.url}\n${analysis?.strengths?.length ? `Strengths for this role: ${analysis.strengths.join("; ")}\n` : ""}${postingText(job.description).slice(0, 2500)}`,
           },
         ],
       },

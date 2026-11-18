@@ -96,6 +96,7 @@ export function mapJobspyRecord(r: JobspyRecord, site: string): RawJob | null {
     url: r.job_url,
     apply_url: r.job_url_direct ?? null,
     board_level: (r as { job_level?: string | null }).job_level ?? null,
+    board_years: r.experience_range ?? null,
     title: r.title,
     company: r.company ?? null,
     company_logo: r.company_logo ?? null,

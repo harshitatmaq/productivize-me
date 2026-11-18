@@ -3,6 +3,7 @@ import { chatJson } from "@/lib/ai/llm";
 import { handle, HttpError, requireUser } from "@/lib/auth";
 import { fetchFullDescription, pageTitle } from "@/lib/jobs/enrich";
 import { dedupeKey, domainOf, hash, normalizeUrl } from "@/lib/jobs/normalize";
+import { cleanPosting } from "@/lib/jobs/integrity";
 import { candidateBrief } from "@/lib/jobs/profile";
 import type { JobProfile } from "@/lib/jobs/types";
 import { readPage } from "@/lib/search/web";
@@ -47,7 +48,8 @@ export async function POST(request: Request) {
       supabase.from("job_profiles").select("profile").eq("user_id", user.id).maybeSingle(),
       readPage(url, 12_000),
     ]);
-    const description = (await fetchFullDescription(url)) ?? raw ?? parsed.data.text ?? "";
+    const posting = cleanPosting((await fetchFullDescription(url)) ?? raw ?? parsed.data.text ?? "");
+    const description = posting.text;
     const titleHint = pageTitle(raw) ?? parsed.data.text?.split("\n")[0] ?? url;
 
     let ex: Extracted | null = null;
@@ -105,8 +107,14 @@ Scoring: 90+ near-perfect, 75-89 strong, 60-74 decent, 40-59 stretch, <40 poor.`
       status: parsed.data.status,
       applied_at: parsed.data.status === "applied" ? new Date().toISOString() : null,
       seen_at: new Date().toISOString(),
+      ...(posting.removed.length ? { signals: { hidden_text: posting.removed } } : {}),
     };
     let { data: job, error } = await supabase.from("jobs").insert(row).select("*").single();
+    if (error && error.message.includes("signals")) {
+      // Database without part 8 of the 0005 migration yet.
+      delete (row as { signals?: unknown }).signals;
+      ({ data: job, error } = await supabase.from("jobs").insert(row).select("*").single());
+    }
     if (error?.code === "23505") {
       // Same company + title already tracked under another link.
       ({ data: job, error } = await supabase.from("jobs").insert({ ...row, dedupe_key: `${row.dedupe_key}#${hash(url).slice(0, 6)}` }).select("*").single());

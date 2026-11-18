@@ -14,26 +14,7 @@ import { useUpdateJobProfile } from "@/lib/queries/jobs";
 import type { JobProfile, WatchCompany } from "@/lib/jobs/types";
 import type { JobProfileRow } from "@/lib/types";
 import { api } from "@/lib/utils";
-
-/** Mirrors parseWatchCompany() on the server (kept client-side to avoid importing node crypto). */
-function parseCompany(input: string): WatchCompany | null {
-  const s = input.trim();
-  const wd = s.match(/([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([A-Za-z0-9_-]+)/i);
-  if (wd) return { ats: "workday", slug: `${wd[1].toLowerCase()}/${wd[2]}`, name: wd[1].split(".")[0] };
-  const patterns: [RegExp, WatchCompany["ats"]][] = [
-    [/(?:job-)?boards(?:-api)?\.greenhouse\.io\/(?:v1\/boards\/)?([a-z0-9_-]+)/i, "greenhouse"],
-    [/jobs\.lever\.co\/([a-z0-9_-]+)/i, "lever"],
-    [/jobs\.ashbyhq\.com\/([a-z0-9_.-]+)/i, "ashby"],
-    [/apply\.workable\.com\/([a-z0-9_-]+)/i, "workable"],
-    [/(?:jobs|careers)\.smartrecruiters\.com\/([a-z0-9_-]+)/i, "smartrecruiters"],
-  ];
-  for (const [re, ats] of patterns) {
-    const m = s.match(re);
-    if (m) return { ats, slug: m[1], name: m[1] };
-  }
-  const short = s.match(/^(greenhouse|lever|ashby|workable|smartrecruiters)\s*[:/]\s*([a-z0-9_.-]+)$/i);
-  return short ? { ats: short[1].toLowerCase() as WatchCompany["ats"], slug: short[2], name: short[2] } : null;
-}
+import { parseWatchCompany } from "@/lib/jobs/ats-url";
 
 export function ProfileEditor({ row }: { row: JobProfileRow }) {
   const qc = useQueryClient();
@@ -97,7 +78,7 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
   };
 
   const addCompany = () => {
-    const c = parseCompany(companyInput);
+    const c = parseWatchCompany(companyInput);
     if (!c) return toast.error("Paste a Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Workday careers URL (or e.g. greenhouse:stripe)");
     const list = row.watch_companies ?? [];
     if (list.some((x) => x.ats === c.ats && x.slug === c.slug)) return toast("Already watching");
@@ -168,7 +149,7 @@ export function ProfileEditor({ row }: { row: JobProfileRow }) {
             <Field label="Must-haves">
               <ChipsInput value={p.must_haves ?? []} onChange={(v) => set("must_haves", v)} />
             </Field>
-            <Field label="Deal-breakers">
+            <Field label="Deal-breakers" hint="The AI scores jobs that break one 30 or lower, e.g. service bond, night shifts, unpaid trial, sales targets">
               <ChipsInput value={p.deal_breakers ?? []} onChange={(v) => set("deal_breakers", v)} />
             </Field>
           </div>

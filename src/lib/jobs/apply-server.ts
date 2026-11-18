@@ -20,6 +20,7 @@ import {
 } from "./apply";
 import { candidateBrief } from "./profile";
 import type { JobAnalysis, JobProfile } from "./types";
+import { postingText } from "@/lib/jobs/integrity";
 
 export type TimelineEvent = { at: string; kind: "prepared" | "resume" | "applied" | "received" | "interview" | "rejected" | "offer" | "note"; text: string };
 export type Application = {
@@ -100,7 +101,7 @@ Return ONLY JSON: {"answers":[{"id":"…","answer":"…","confidence":0-100,"nee
             resumeText ? `RESUME (excerpt)\n${resumeText.slice(0, 3000)}` : "",
             reusable.length ? `SAVED ANSWERS (reuse and adapt)\n${reusable.join("\n")}` : "",
             memory.length ? `HOW THEY LIKE TO WORK\n- ${memory.join("\n- ")}` : "",
-            `JOB\n${job.title} at ${job.company ?? "the company"}\n${job.description.slice(0, 6000)}`,
+            `JOB\n${job.title} at ${job.company ?? "the company"}\n${postingText(job.description).slice(0, 6000)}`,
             open.length ? `QUESTIONS\n${open.map((f) => JSON.stringify({ id: f.id, question: f.label, options: f.options })).join("\n")}` : "",
           ]
             .filter(Boolean)
