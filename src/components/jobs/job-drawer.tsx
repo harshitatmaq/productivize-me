@@ -14,7 +14,7 @@ import { useDeleteJob, useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { api, cn, timeAgo } from "@/lib/utils";
 import type { JobAnalysis } from "@/lib/jobs/types";
-import { CompanyLogo, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
+import { CompanyLogo, MarkClosedButton, requirementsLabel, ScoreBadge, sourceLabel, STATUS_META } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
 import { ApplyPanel } from "./apply-panel";
 import { StretchCard } from "./stretch-card";
@@ -143,6 +143,13 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
             <AlertTriangle className="h-3 w-3" /> {job.closed_reason ?? "No longer accepting applications"}
           </Badge>
         ) : null}
+        {requirementsLabel(job) ? <Badge>{requirementsLabel(job)}</Badge> : null}
+        {!job.closed_at ? (
+          <span className="text-faint">
+            {job.checked_at ? `still open · checked ${timeAgo(job.checked_at)}` : job.check_note ? `not verified yet (${job.check_note.toLowerCase()})` : "not checked yet"}
+          </span>
+        ) : null}
+        {!job.closed_at ? <MarkClosedButton job={job} variant="button" /> : null}
         {job.location ? (
           <span className="inline-flex items-center gap-1">
             <MapPin className="h-3.5 w-3.5" /> {job.location}

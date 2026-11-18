@@ -11,6 +11,7 @@ import { packStats, type PackField } from "@/lib/jobs/apply";
 import { useApplication, useApplicationAction, useUpdateApplication } from "@/lib/queries/applications";
 import type { Job } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
+import { GetNoticed } from "./get-noticed";
 import { ResumeButton } from "./resume-pdf";
 
 const SOURCE: Record<PackField["source"], { label: string; tone: "success" | "accent" | "warning" | "neutral"; tip: string }> = {
@@ -69,7 +70,12 @@ function FieldRow({ field, onSave }: { field: PackField; onSave: (answer: string
           <>
             <CopyIcon text={field.answer} label="answer" />
             <Tip content="Edit answer">
-              <button type="button" aria-label="Edit answer" onClick={() => (setText(field.answer), setEditing((e) => !e))} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-panel-hover hover:text-fg">
+              <button
+                type="button"
+                aria-label="Edit answer"
+                onClick={() => (setText(field.answer), setEditing((e) => !e))}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-panel-hover hover:text-fg"
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </Tip>
@@ -80,7 +86,13 @@ function FieldRow({ field, onSave }: { field: PackField; onSave: (answer: string
       </div>
       {editing ? (
         <div className="mt-2 space-y-2">
-          <Textarea rows={Math.min(8, Math.max(2, Math.ceil(text.length / 70)))} value={text} onChange={(e) => setText(e.target.value)} autoFocus aria-label={`Answer for ${field.label}`} />
+          <Textarea
+            rows={Math.min(8, Math.max(2, Math.ceil(text.length / 70)))}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            autoFocus
+            aria-label={`Answer for ${field.label}`}
+          />
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
               Cancel
@@ -133,40 +145,58 @@ export function ApplyPanel({ job }: { job: Job }) {
 
   if (!app?.prepared_at) {
     return (
-      <div className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
-        <ClipboardList className="mx-auto mb-3 h-6 w-6 text-accent" />
-        <div className="text-[14px] font-medium text-fg">Get this application ready</div>
-        <p className="mx-auto mt-1 max-w-md text-[13px] text-muted">
-          Reads the application form (exact questions for Greenhouse jobs, common questions elsewhere), fills what it knows from your answer bank and profile,
-          drafts the open questions and a cover letter, and flags what only you can answer. Nothing is submitted for you.
-        </p>
-        <Button className="mt-4" variant="primary" onClick={() => run("prepare")} loading={action.isPending}>
-          <Sparkles className="h-3.5 w-3.5" /> Prepare application
-        </Button>
-        {app?.timeline?.length ? <Timeline events={app.timeline} /> : null}
-      </div>
+      <>
+        <GetNoticed job={job} resume={app?.resume} />
+        <div className="rounded-xl border border-dashed border-line-strong px-6 py-10 text-center">
+          <ClipboardList className="mx-auto mb-3 h-6 w-6 text-accent" />
+          <div className="text-[14px] font-medium text-fg">Get this application ready</div>
+          <p className="mx-auto mt-1 max-w-md text-[13px] text-muted">
+            Reads the application form (exact questions for Greenhouse jobs, common questions elsewhere), fills what it knows from your answer bank and profile,
+            drafts the open questions and a cover letter, and flags what only you can answer. Nothing is submitted for you.
+          </p>
+          <Button className="mt-4" variant="primary" onClick={() => run("prepare")} loading={action.isPending}>
+            <Sparkles className="h-3.5 w-3.5" /> Prepare application
+          </Button>
+          {app?.timeline?.length ? <Timeline events={app.timeline} /> : null}
+        </div>
+      </>
     );
   }
 
   const stats = packStats(app.fields);
   const saveField = (id: string, answer: string) => {
-    const fields = app.fields.map((f) => (f.id === id ? { ...f, answer, source: f.source === "ai" || f.source === "you" ? (f.source === "ai" && answer.trim() ? "ai" : "you") : f.source } : f)) as PackField[];
+    const fields = app.fields.map((f) =>
+      f.id === id ? { ...f, answer, source: f.source === "ai" || f.source === "you" ? (f.source === "ai" && answer.trim() ? "ai" : "you") : f.source } : f,
+    ) as PackField[];
     update.mutate({ jobId: job.id, patch: { fields } }, { onError: (e) => toast.error((e as Error).message) });
   };
   const applied = !!app.applied_at;
 
   return (
     <div className="space-y-5">
+      <GetNoticed job={job} resume={app.resume} />
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel-2/50 p-3 text-[12.5px]">
         <span className="font-medium text-fg">
           {stats.answered}/{stats.total} answered
         </span>
         {stats.needYou ? <Badge tone="warning">{stats.needYou} need you</Badge> : <Badge tone="success">nothing missing</Badge>}
-        {stats.drafts ? <Badge tone="accent">{stats.drafts} AI draft{stats.drafts > 1 ? "s" : ""} to check</Badge> : null}
-        <span className="text-muted">· {app.form_source === "greenhouse" ? "the company's own form" : "common questions (this site's form couldn't be read)"}</span>
+        {stats.drafts ? (
+          <Badge tone="accent">
+            {stats.drafts} AI draft{stats.drafts > 1 ? "s" : ""} to check
+          </Badge>
+        ) : null}
+        <span className="text-muted">
+          · {app.form_source === "greenhouse" ? "the company's own form" : "common questions (this site's form couldn't be read)"}
+        </span>
         <span className="flex-1" />
         <Tip content="Prepare again (keeps your edits, redrafts the rest)">
-          <Button size="xs" variant="ghost" onClick={() => run("prepare")} loading={action.isPending && action.variables?.action === "prepare"} aria-label="Prepare again">
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => run("prepare")}
+            loading={action.isPending && action.variables?.action === "prepare"}
+            aria-label="Prepare again"
+          >
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
         </Tip>
@@ -190,7 +220,12 @@ export function ApplyPanel({ job }: { job: Job }) {
           <div className="flex items-center">
             <CopyIcon text={app.cover_letter ?? ""} label="cover letter" />
             <Tip content="Edit cover letter">
-              <button type="button" aria-label="Edit cover letter" onClick={() => setCoverEdit(coverEdit === null ? (app.cover_letter ?? "") : null)} className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-panel-hover hover:text-fg">
+              <button
+                type="button"
+                aria-label="Edit cover letter"
+                onClick={() => setCoverEdit(coverEdit === null ? (app.cover_letter ?? "") : null)}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-panel-hover hover:text-fg"
+              >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </Tip>
@@ -200,13 +235,19 @@ export function ApplyPanel({ job }: { job: Job }) {
           <div className="space-y-2">
             <Textarea rows={10} value={coverEdit} onChange={(e) => setCoverEdit(e.target.value)} aria-label="Cover letter" />
             <div className="flex justify-end">
-              <Button size="sm" variant="primary" onClick={() => update.mutate({ jobId: job.id, patch: { cover_letter: coverEdit } }, { onSuccess: () => setCoverEdit(null) })}>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => update.mutate({ jobId: job.id, patch: { cover_letter: coverEdit } }, { onSuccess: () => setCoverEdit(null) })}
+              >
                 Save
               </Button>
             </div>
           </div>
         ) : (
-          <div className="whitespace-pre-line rounded-lg border border-line bg-panel-2/60 p-3 text-[13px] leading-relaxed text-fg-2">{app.cover_letter || "No cover letter yet — prepare again, or use Tailor with AI."}</div>
+          <div className="whitespace-pre-line rounded-lg border border-line bg-panel-2/60 p-3 text-[13px] leading-relaxed text-fg-2">
+            {app.cover_letter || "No cover letter yet — prepare again, or use Tailor with AI."}
+          </div>
         )}
       </section>
 

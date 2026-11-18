@@ -202,13 +202,15 @@ Return ONLY a JSON object with these fields: ${PROFILE_FIELDS}`,
 export function candidateBrief(p: JobProfile): string {
   const parts = [
     p.headline && `Headline: ${p.headline}`,
-    p.current_title && `Current: ${p.current_title}${p.years_experience ? `, ${p.years_experience} yrs experience` : ""}`,
+    p.current_title && `Current: ${p.current_title}`,
+    typeof p.years_experience === "number" && `Experience: ${p.years_experience} year${p.years_experience === 1 ? "" : "s"} in total (do not assume more)`,
     p.target_titles?.length && `Targets: ${p.target_titles.join(", ")}`,
     p.seniority?.length && `Seniority: ${p.seniority.join(", ")}`,
     p.skills?.length && `Skills: ${p.skills.slice(0, 30).join(", ")}`,
     p.domains?.length && `Domains: ${p.domains.join(", ")}`,
     (p.locations?.length || p.remote) &&
       `Location: ${(p.locations ?? []).join(", ") || "flexible"}; work mode: ${p.remote ?? "any"}${p.open_to_relocate ? "; open to relocate" : ""}`,
+    p.countries?.length && `Can work in (countries): ${p.countries.join(", ")}`,
     p.work_authorization && `Work authorization: ${p.work_authorization}`,
     p.salary_expectation && `Expected pay: ${p.salary_expectation}`,
     p.job_types?.length && `Job types: ${p.job_types.join(", ")}`,
@@ -218,6 +220,15 @@ export function candidateBrief(p: JobProfile): string {
     p.avoid_companies?.length && `Avoid companies: ${p.avoid_companies.join(", ")}`,
   ].filter(Boolean);
   return parts.join("\n").slice(0, 1800);
+}
+
+/** Title words that never fit this candidate's level (only when years of experience are known). */
+export function seniorityExcludes(p: JobProfile): string[] {
+  const wantsSenior = (p.seniority ?? []).some((s) => /senior|lead|staff|principal|manager|director/i.test(s));
+  if (typeof p.years_experience !== "number" || wantsSenior) return [];
+  if (p.years_experience < 3) return ["senior", "sr", "staff", "principal", "lead", "head", "director", "manager", "architect"];
+  if (p.years_experience < 6) return ["principal", "staff", "director", "head"];
+  return [];
 }
 
 /** Deterministic plan used when the LLM is unavailable. */
@@ -239,7 +250,7 @@ export function fallbackPlan(p: JobProfile): SearchPlan {
     locations,
     countries,
     remote: p.remote ?? "any",
-    exclude: p.exclude_keywords ?? [],
+    exclude: [...(p.exclude_keywords ?? []), ...seniorityExcludes(p)],
     web_queries,
   };
 }
@@ -264,7 +275,10 @@ Return ONLY JSON:
  "web_queries": [8-12 objects {"q": "short natural search query for single job postings", "domains": "india"|"ats"|"global"|"startups"|"remote"}]
 }
 Web queries should target individual postings (e.g. "Senior Backend Engineer Golang Bengaluru"), vary titles/locations/angles,
-and use "india" for Indian job boards, "ats" for company career pages (Greenhouse/Lever/Ashby/Workday), "startups", "remote" or "global".`,
+and use "india" for Indian job boards, "ats" for company career pages (Greenhouse/Lever/Ashby/Workday), "startups", "remote" or "global".
+Match the candidate's experience: with 0-2 years, search entry-level titles ("Junior …", "Associate …", "… I", "SDE 1", "Graduate …")
+and phrases like "0-2 years" or "fresher", never Senior/Lead/Staff; with 3-5 years, mid-level. Prefer the candidate's own country;
+only use "remote"/"global" queries for roles open to their country (e.g. "remote India", "worldwide").`,
           },
           { role: "user", content: candidateBrief(p) },
         ],
@@ -287,7 +301,7 @@ and use "india" for Indian job boards, "ats" for company career pages (Greenhous
           locations: asStringArray(o.locations) ?? fallback.locations,
           countries: (asStringArray(o.countries) ?? fallback.countries).map((c) => c.toLowerCase().slice(0, 2)),
           remote: (["remote", "hybrid", "onsite", "any"].includes(String(o.remote)) ? o.remote : fallback.remote) as RemotePreference,
-          exclude: asStringArray(o.exclude) ?? fallback.exclude,
+          exclude: [...new Set([...(asStringArray(o.exclude) ?? []), ...fallback.exclude])],
           web_queries: wq.length ? wq.slice(0, 14) : fallback.web_queries,
         };
       },

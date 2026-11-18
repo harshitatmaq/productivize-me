@@ -1,6 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { Ban } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Tip } from "@/components/ui/menu";
+import { useUpdateJob } from "@/lib/queries/jobs";
+import type { Job } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PALETTE = ["#5e6ad2", "#2f9e6e", "#d9730d", "#c2410c", "#7c3aed", "#0e7490", "#be185d", "#4d7c0f"];
@@ -87,3 +93,34 @@ export const STATUS_META: Record<string, { label: string; color: string }> = {
   rejected: { label: "Rejected", color: "var(--danger)" },
   archived: { label: "Hidden", color: "var(--faint)" },
 };
+
+/** "No longer accepting applications?" — removes the job from the board in one click (with undo). */
+export function MarkClosedButton({ job, variant = "icon" }: { job: Job; variant?: "icon" | "button" }) {
+  const update = useUpdateJob();
+  if (job.closed_at) return null;
+  const mark = () => {
+    const prev = { status: job.status, closed_at: job.closed_at ?? null, closed_reason: job.closed_reason ?? null };
+    update.mutate({ id: job.id, patch: { closed_at: new Date().toISOString(), closed_reason: "You marked it closed", ...(job.status === "new" ? { status: "archived" } : {}) } });
+    toast("Removed — no longer accepting applications", { action: { label: "Undo", onClick: () => update.mutate({ id: job.id, patch: prev }) } });
+  };
+  return variant === "icon" ? (
+    <Tip content="No longer accepting applications? Remove it">
+      <button onClick={mark} aria-label="Mark as closed" className="rounded-md p-1.5 text-faint transition-colors hover:bg-panel-hover hover:text-danger">
+        <Ban className="h-3.5 w-3.5" />
+      </button>
+    </Tip>
+  ) : (
+    <Button size="xs" variant="ghost" onClick={mark}>
+      <Ban className="h-3.5 w-3.5" /> It&apos;s closed
+    </Button>
+  );
+}
+
+/** "Asks 3+ years · mid level · only hires in India". */
+export function requirementsLabel(job: Pick<Job, "requirements">): string | null {
+  const r = job.requirements;
+  if (!r) return null;
+  const parts = [r.min_years != null ? `asks ${r.min_years}${r.max_years ? `–${r.max_years}` : "+"} yrs` : "", r.level && r.level !== "mid" ? `${r.level} level` : r.level === "mid" ? "mid level" : "", r.restricted_to?.length ? `only ${r.restricted_to.slice(0, 2).join(", ")}` : ""].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+

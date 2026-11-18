@@ -12,6 +12,7 @@ import { applyInterestsToPlan, interestBonus, interestContext, matchInterests, t
 import { buildSearchPlan } from "./profile";
 import { feedbackContext, semanticRank, type Candidate } from "./rank";
 import { scoreJobs } from "./scoring";
+import { fitGate } from "./fit-rules";
 import { isDeepSearchTime, localDayHour } from "./liveness";
 import { sweepJobs } from "./liveness-run";
 import { JOB_SOURCES, type JobSource } from "./sources";
@@ -294,7 +295,19 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
     await pushProgress(true);
     const maxScore = envInt("JOBS_MAX_SCORED_PER_RUN", deep ? 64 : manual || live ? 40 : 32);
     const minRel = live ? 0.15 : Number(process.env.JOBS_MIN_RELEVANCE ?? 0.3);
-    const keywordPool: Candidate[] = fresh
+    // Hard fit rules first: too many years asked, too senior a title, or remote only in
+    // countries you can't work in never reach the AI (or your board).
+    const blockedWhy = new Map<string, number>();
+    const fitting = fresh.filter((job) => {
+      const gate = fitGate(job, profile);
+      job.requirements = gate.requirements;
+      if (gate.verdict !== "block") return true;
+      const key = gate.reasons[0]?.replace(/\d+/g, "N") ?? "rule";
+      blockedWhy.set(key, (blockedWhy.get(key) ?? 0) + 1);
+      return false;
+    });
+    if (blockedWhy.size) log(`fit rules skipped ${fresh.length - fitting.length}: ${[...blockedWhy].map(([k, n]) => `${n}× ${k}`).join(", ")}`);
+    const keywordPool: Candidate[] = fitting
       .map((job) => ({ job, rel: job.needs_extraction ? Math.max(relevance(job, plan, profile), 0.45) : relevance(job, plan, profile) }))
       .filter((x) => x.rel >= minRel * 0.6)
       .sort((a, b) => b.rel - a.rel)
@@ -320,7 +333,16 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
 
     const preferences = [await feedbackContext(admin, userId), interestContext(interests)].filter(Boolean).join("\n") || undefined;
     const vectorFor = new Map(ranked.map((c) => [c.job.url, c]));
-    const { scored, dropped, providers } = await scoreJobs(profile, ranked, log, Number(process.env.JOBS_SCORE_BATCH ?? 5) || 5, preferences);
+    const { scored: rawScored, dropped, providers } = await scoreJobs(profile, ranked, log, Number(process.env.JOBS_SCORE_BATCH ?? 5) || 5, preferences);
+    // Re-apply the rules on the full descriptions: blocked → archived, stretch → capped.
+    const scored = rawScored.map((j) => {
+      const gate = fitGate(j, profile);
+      j.requirements = gate.requirements;
+      if (gate.verdict === "ok") return j;
+      const concerns = [...gate.reasons, ...j.concerns].slice(0, 3);
+      if (gate.verdict === "block") return { ...j, score: Math.min(j.score, 30), verdict: "poor", concerns };
+      return { ...j, score: Math.min(j.score, gate.cap ?? 55), verdict: "stretch", concerns };
+    });
     stats.scored = scored.length;
     stats.dropped = dropped;
     stats.providers = providers;
@@ -367,12 +389,18 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
           embedding: c?.vector && embeddingModel ? toPgVector(c.vector) : null,
           embedding_model: c?.vector ? (embeddingModel ?? null) : null,
           semantic_score: c?.semantic ?? null,
+          requirements: j.requirements && Object.keys(j.requirements).length ? j.requirements : null,
         };
       });
-      const { data: inserted, error } = await admin
+      let { data: inserted, error } = await admin
         .from("jobs")
         .upsert(rows, { onConflict: "user_id,url_hash", ignoreDuplicates: true })
         .select("id, title, company, score");
+      if (error && /requirements/.test(error.message)) {
+        // Database without part 7 of the 0005 migration yet: save without requirements.
+        for (const r of rows) delete (r as { requirements?: unknown }).requirements;
+        ({ data: inserted, error } = await admin.from("jobs").upsert(rows, { onConflict: "user_id,url_hash", ignoreDuplicates: true }).select("id, title, company, score"));
+      }
       let ok: { id: string; title: string; company: string | null; score: number }[] = inserted ?? [];
       if (error) {
         // A dedupe_key clash aborts the whole batch; fall back to row-by-row inserts.
@@ -414,19 +442,19 @@ export async function runJobSearch(userId: string, opts: RunOptions): Promise<Ru
 
     if (manual && !deep) {
       // "Search now" also clears out postings that stopped accepting applications.
-      const sweep = await sweepJobs(admin, userId, { limit: 20, recheckHours: 6 }).catch(() => ({ checked: 0, closed: 0, stale: 0 }));
-      if (sweep.closed || sweep.stale) log(`freshness: removed ${sweep.closed} closed and ${sweep.stale} older postings`);
+      const sweep = await sweepJobs(admin, userId, { limit: 20, recheckHours: 6 }).catch(() => ({ checked: 0, closed: 0, stale: 0, unfit: 0, unverified: 0 }));
+      if (sweep.closed || sweep.stale || sweep.unfit) log(`freshness: removed ${sweep.closed} closed, ${sweep.stale} older and ${sweep.unfit} not-fitting postings`);
     }
     if (deep) {
       stats.stage = "Removing expired postings";
       await pushProgress(true);
-      const sweep = await sweepJobs(admin, userId, { limit: 60, recheckHours: 12 }).catch(() => ({ checked: 0, closed: 0, stale: 0 }));
-      log(`freshness: checked ${sweep.checked}, removed ${sweep.closed} closed and ${sweep.stale} older postings`);
+      const sweep = await sweepJobs(admin, userId, { limit: 60, recheckHours: 12 }).catch(() => ({ checked: 0, closed: 0, stale: 0, unfit: 0, unverified: 0 }));
+      log(`freshness: checked ${sweep.checked}, removed ${sweep.closed} closed, ${sweep.stale} older and ${sweep.unfit} not-fitting postings${sweep.unverified ? ` (${sweep.unverified} couldn't be verified yet)` : ""}`);
       await notify(opts.profile, {
         kind: "jobs",
         dedupeKey: `deep:${userId}:${new Date().toISOString().slice(0, 10)}`,
         title: `Weekend job search: ${stats.inserted} new match${stats.inserted === 1 ? "" : "es"}${stats.strong ? ` (${stats.strong} strong)` : ""}`,
-        body: `Searched every source${sweep.closed + sweep.stale ? ` and removed ${sweep.closed + sweep.stale} expired or old posting${sweep.closed + sweep.stale === 1 ? "" : "s"}` : ""}.`,
+        body: `Searched every source${sweep.closed + sweep.stale + sweep.unfit ? ` and removed ${sweep.closed + sweep.stale + sweep.unfit} expired, old or not-fitting posting${sweep.closed + sweep.stale + sweep.unfit === 1 ? "" : "s"}` : ""}.`,
         url: "/jobs",
         push: { tag: "jobs-weekend" },
       }).catch(() => {});

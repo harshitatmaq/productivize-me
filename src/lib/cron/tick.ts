@@ -110,7 +110,7 @@ export async function runTick(now = new Date()) {
     if (!p.job_search_enabled) continue;
     try {
       const sw = await sweepJobs(admin, p.id, { limit: 5, recheckHours: 24 });
-      if (sw.closed || sw.stale) results[`freshness:${p.email ?? p.id}`] = [`removed ${sw.closed} closed, ${sw.stale} old (checked ${sw.checked})`];
+      if (sw.closed || sw.stale || sw.unfit) results[`freshness:${p.email ?? p.id}`] = [`removed ${sw.closed} closed, ${sw.stale} old, ${sw.unfit} not fitting (checked ${sw.checked})`];
     } catch (e) {
       console.warn("[tick] freshness skipped:", (e as Error).message);
     }

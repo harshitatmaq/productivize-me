@@ -178,6 +178,11 @@ export type Job = {
   checked_at?: string | null;
   closed_at?: string | null;
   closed_reason?: string | null;
+  /** A check that couldn't read the posting, and why (retried in a few hours). */
+  check_failed_at?: string | null;
+  check_note?: string | null;
+  /** What the posting asks for (years, level, countries). */
+  requirements?: import("@/lib/jobs/fit-rules").Requirements | null;
   /** Set when the job was found by a "Search & ask Scout" query. */
   search_id: string | null;
   created_at: string;

@@ -75,6 +75,12 @@ export type RawJob = {
   apply_url?: string | null;
   /** Search hits whose title/company need cleaning up by the LLM. */
   needs_extraction?: boolean;
+  /** The job board's own level label ("Mid-level", "Entry level"), when it gives one. */
+  board_level?: string | null;
+  /** Countries/regions a remote job is limited to, from the board's own field. */
+  board_restrictions?: string[];
+  /** What the posting asks for (set by the fit rules). */
+  requirements?: import("./fit-rules").Requirements;
 };
 
 export type ScoredJob = RawJob & {

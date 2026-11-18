@@ -1,5 +1,6 @@
 "use client";
 
+import { applyToday } from "@/lib/jobs/board";
 import { HealthWidget } from "@/components/health/health-widget";
 import { CheckIns } from "@/components/interests/check-ins";
 import { Tip } from "@/components/ui/menu";
@@ -91,14 +92,15 @@ export function TodayRail() {
     queryFn: async () => {
       const { data } = await sb()
         .from("jobs")
-        .select("id, title, company, score, company_domain")
-        .eq("status", "new")
+        .select("id, title, company, score, company_domain, status, posted_at, created_at, closed_at")
+        .in("status", ["new", "saved"])
+        .is("closed_at", null)
         .order("created_at", { ascending: false })
-        .order("score", { ascending: false })
-        .limit(30);
-      return ((data ?? []) as Pick<Job, "id" | "title" | "company" | "score" | "company_domain">[])
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, 3);
+        .limit(60);
+      const rows = (data ?? []) as Pick<Job, "id" | "title" | "company" | "score" | "company_domain" | "status" | "posted_at" | "created_at" | "closed_at">[];
+      // Fresh strong fits first (apply early); otherwise the best new matches.
+      const fresh = applyToday(rows, Date.now(), { max: 3 });
+      return fresh.length ? fresh : rows.filter((r) => r.status === "new").sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 3);
     },
   });
 
@@ -167,7 +169,7 @@ export function TodayRail() {
         ) : null}
       </Widget>
 
-      <Widget title="Top job matches" icon={<Briefcase className="h-3.5 w-3.5 text-success" />} href="/jobs">
+      <Widget title={jobs.some((j) => now - Date.parse(j.posted_at ?? j.created_at) < 72 * 3_600_000) ? "Apply today" : "Top job matches"} icon={<Briefcase className="h-3.5 w-3.5 text-success" />} href="/jobs">
         {jobs.length ? (
           <ul className="space-y-2.5">
             {jobs.map((j) => (
