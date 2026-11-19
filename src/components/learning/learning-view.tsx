@@ -25,6 +25,7 @@ import { api, cn } from "@/lib/utils";
 import { dateLabel } from "@/components/tasks/task-utils";
 import { AiLinkButtons, chatgptUrl, claudeUrl, PROMPTS } from "./ai-links";
 import { Heatmap } from "./heatmap";
+import { usePageShortcuts } from "@/lib/shortcuts";
 
 type Draft = {
   id?: string;
@@ -191,6 +192,12 @@ export function LearningView() {
   const blank = (): Draft => ({ entry_date: today, title: "", content: "", tags: [], minutes: null, confidence: null, questions: "", resources: [] });
 
   const [reviewing, setReviewing] = useState(false);
+  usePageShortcuts("learning", "Learning", [
+    { key: "n", label: "Log learning", run: () => setDraft(blank()) },
+    { key: "r", label: "Review flashcards", run: () => setReviewing(true) },
+    { keys: ["Space"], label: "Show the answer (while reviewing)" },
+    { keys: ["1–4"], label: "Again / Hard / Good / Easy (while reviewing)" },
+  ]);
   const wantsReview = params.get("review");
   useTrigger(wantsReview, () => setReviewing(true));
   useEffect(() => {
@@ -517,6 +524,7 @@ export function LearningView() {
         onOpenChange={(o) => !o && setDraft(null)}
         title={draft?.id ? "Edit entry" : "What did you learn?"}
         size="lg"
+        onSubmit={() => !save.isPending && submit()}
         footer={
           <>
             {draft ? <AiLinkButtons size="sm" className="mr-auto" prompt={draft.title ? PROMPTS[0].build(draft) : undefined} /> : null}
@@ -539,10 +547,11 @@ export function LearningView() {
               className="w-full bg-transparent text-[17px] font-medium text-fg outline-none placeholder:text-faint"
             />
             <Textarea
+              markdown
               rows={7}
               value={draft.content}
               onChange={(e) => setDraft({ ...draft, content: e.target.value })}
-              placeholder={"In your own words… (markdown: **bold**, - lists, `code`)\n\n- Key idea\n- Why it matters\n- Example"}
+              placeholder={"In your own words…\n\n- Key idea\n- Why it matters\n- Example"}
             />
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Date">

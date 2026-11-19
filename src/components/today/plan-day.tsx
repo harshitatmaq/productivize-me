@@ -15,6 +15,7 @@ import { useCarryTasks, useTasks, useUpdateTask } from "@/lib/queries/tasks";
 import type { DayPlan } from "@/app/api/tasks/plan/route";
 import { api } from "@/lib/utils";
 import { formatTime } from "@/components/tasks/task-utils";
+import { usePageShortcuts } from "@/lib/shortcuts";
 
 /** "Plan my day": AI orders today's tasks into time blocks; apply the order (and optionally times). */
 export function PlanDay() {
@@ -24,6 +25,7 @@ export function PlanDay() {
   const update = useUpdateTask();
   const carry = useCarryTasks();
   const [open, setOpen] = useState(false);
+  usePageShortcuts("plan-day", "Today", [{ key: "p", label: "Plan my day", run: () => setOpen(true) }]);
   const [energy, setEnergy] = useState<"low" | "normal" | "high">("normal");
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,9 @@
+"use client";
+
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
+import { useIsMac } from "@/lib/shortcuts";
+import { applyTextEdit, formatForKey } from "@/lib/text-format";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...props },
@@ -8,11 +12,45 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   return <input ref={ref} className={cn("field", className)} {...props} />;
 });
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea(
-  { className, ...props },
+type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  /** Markdown shortcuts: Ctrl/⌘+B bold, Ctrl+I italic, Ctrl+K link, lists continue on Enter… (see Ctrl+/). */
+  markdown?: boolean;
+  /** Show the one-line shortcut hint under a markdown field (default true). */
+  hint?: boolean;
+};
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
+  { className, markdown, hint = true, onKeyDown, ...props },
   ref,
 ) {
-  return <textarea ref={ref} className={cn("field min-h-20 resize-y leading-relaxed", className)} {...props} />;
+  const mac = useIsMac();
+  const field = (
+    <textarea
+      ref={ref}
+      className={cn("field min-h-20 resize-y leading-relaxed", className)}
+      onKeyDown={(e) => {
+        onKeyDown?.(e);
+        if (!markdown || e.defaultPrevented || e.nativeEvent.isComposing) return;
+        const el = e.currentTarget;
+        const edit = formatForKey(e, { value: el.value, start: el.selectionStart, end: el.selectionEnd });
+        if (!edit) return;
+        e.preventDefault();
+        e.stopPropagation();
+        applyTextEdit(el, edit);
+      }}
+      {...props}
+    />
+  );
+  if (!markdown || !hint) return field;
+  const k = (x: string) => (mac ? `⌘${x}` : `Ctrl+${x}`);
+  return (
+    <div>
+      {field}
+      <p className="mt-1 text-[11px] text-faint">
+        Markdown · {k("B")} bold · {k("I")} italic · {k("K")} link · {mac ? "⌘⇧8" : "Ctrl+Shift+8"} list · {k("/")} outside a note for all shortcuts
+      </p>
+    </div>
+  );
 });
 
 export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function Select(

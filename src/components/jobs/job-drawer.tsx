@@ -96,6 +96,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
       open={!!job}
       onOpenChange={(o) => !o && onClose()}
       size="lg"
+      onSubmit={tab === "track" ? saveTracking : undefined}
       title={
         <span className="flex items-center gap-3">
           <CompanyLogo name={job.company} domain={job.company_domain} logo={job.company_logo} size={32} />
@@ -347,7 +348,7 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
             </Field>
           </div>
           <Field label="Notes">
-            <Textarea rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referral contact, salary discussed, interview feedback…" />
+            <Textarea markdown hint={false} rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Referral contact, salary discussed, interview feedback…" />
           </Field>
           <div className="flex items-center justify-between">
             <span className="text-[12px] text-faint">{job.applied_at ? `Applied ${timeAgo(job.applied_at)}` : "Not applied yet"}</span>

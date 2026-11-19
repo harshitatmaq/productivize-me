@@ -14,6 +14,7 @@ export function Dialog({
   footer,
   className,
   size = "md",
+  onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,6 +24,8 @@ export function Dialog({
   footer?: ReactNode;
   className?: string;
   size?: "sm" | "md" | "lg" | "xl";
+  /** Ctrl/⌘+Enter anywhere in the dialog runs this (usually Save). */
+  onSubmit?: () => void;
 }) {
   const widths = { sm: "sm:max-w-sm", md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-4xl" };
   return (
@@ -38,6 +41,12 @@ export function Dialog({
             widths[size],
             className,
           )}
+          onKeyDown={(e) => {
+            if (onSubmit && e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.defaultPrevented) {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
           onOpenAutoFocus={(e) => {
             // keep phones from popping the keyboard unless a field asks for it
             if (window.matchMedia("(max-width: 640px)").matches) e.preventDefault();

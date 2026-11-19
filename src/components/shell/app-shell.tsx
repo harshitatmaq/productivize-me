@@ -5,7 +5,7 @@ import { LogOut, Menu as MenuIcon, Moon, Plus, Search, Sun, X } from "lucide-rea
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FocusPill } from "@/components/focus/focus-pill";
 import { FocusProvider } from "@/components/focus/focus-store";
 import { CarryReview } from "@/components/tasks/carry-review";
@@ -13,7 +13,8 @@ import { QuickAddDialog } from "@/components/tasks/quick-add-dialog";
 import { TaskEditor } from "@/components/tasks/task-editor";
 import { ShareDialogHost } from "@/components/together/share-dialog";
 import { Menu, MenuItem, MenuLabel, MenuSeparator, Tip } from "@/components/ui/menu";
-import { useHotkey, useMounted, useToday } from "@/lib/hooks";
+import { useMounted, useToday } from "@/lib/hooks";
+import { Shortcuts } from "./shortcuts";
 import { sb } from "@/lib/queries/client";
 import { useProfile, useUpdateProfile, useUser } from "@/lib/queries/profile";
 import { useTasks } from "@/lib/queries/tasks";
@@ -297,11 +298,6 @@ function TimezoneSync() {
   return null;
 }
 
-function Hotkeys() {
-  const { openQuickAdd } = useUi();
-  useHotkey("c", useCallback(() => openQuickAdd(), [openQuickAdd]));
-  return null;
-}
 
 function ShellSkeleton() {
   return (
@@ -357,7 +353,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TaskEditor />
       <CarryReview />
       <TimezoneSync />
-      <Hotkeys />
+      <Shortcuts />
       <FocusPill />
       </FocusProvider>
     </UiProvider>
