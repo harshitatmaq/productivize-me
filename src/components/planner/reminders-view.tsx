@@ -17,6 +17,7 @@ import { computeNextFire, describeRule, type ReminderFrequency } from "@/lib/rec
 import { browserTimeZone } from "@/lib/time";
 import type { Profile, Reminder } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
+import { EditButton } from "@/components/ui/edit-button";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -242,6 +243,22 @@ export function RemindersView() {
                   <Switch checked={r.active} onChange={(v) => toggle(r, v)} ariaLabel={`${r.title}: ${r.active ? "on" : "paused"}`} />
                 </span>
               </Tip>
+              <EditButton
+                label="Edit reminder"
+                onClick={() =>
+                  setDraft({
+                    id: r.id,
+                    title: r.title,
+                    notes: r.notes ?? "",
+                    frequency: r.frequency,
+                    time_of_day: r.time_of_day.slice(0, 5),
+                    days_of_week: r.days_of_week ?? [],
+                    day_of_month: r.day_of_month,
+                    start_date: r.start_date,
+                    url: r.url ?? "",
+                  })
+                }
+              />
               <Menu
                 label="More actions — edit, test, delete"
                 trigger={

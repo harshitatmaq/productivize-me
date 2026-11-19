@@ -1,18 +1,20 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Network, Sparkles } from "lucide-react";
+import { ArrowRight, Combine, Network, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, SectionTitle } from "@/components/ui/misc";
-import { buildGraph, layoutGraph, learnNext } from "@/lib/learning-map";
+import { buildGraph, layoutGraph, learnNext, similarTopics, topicSimilarity } from "@/lib/learning-map";
+import { Select } from "@/components/ui/field";
 import type { JobAnalysis } from "@/lib/jobs/types";
 import { sb } from "@/lib/queries/client";
 import { useFlashcards } from "@/lib/queries/flashcards";
 import { useInterests } from "@/lib/queries/interests";
-import { useConnectEntries, useLearning, useTopicLinks } from "@/lib/queries/learning";
+import { useConnectEntries, useLearning, useMergeTopics, useTopicLinks } from "@/lib/queries/learning";
 import { cn } from "@/lib/utils";
+import { useResettableState } from "@/lib/hooks";
 
 const W = 760;
 const H = 420;
@@ -32,7 +34,9 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
     staleTime: 10 * 60_000,
   });
   const connect = useConnectEntries();
+  const merge = useMergeTopics();
   const [selected, setSelected] = useState<string | null>(null);
+  const [mergeInto, setMergeInto] = useResettableState<string, string | null>(selected, () => "");
 
   const graph = useMemo(() => buildGraph({ entries, links, cards, interests }), [entries, links, cards, interests]);
   // Keep the map readable: learned topics plus the next steps around them (max ~45 nodes).
@@ -48,6 +52,31 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
   const next = useMemo(() => learnNext(graph, gaps), [graph, gaps]);
   const unmapped = entries.filter((e) => !e.topics?.length);
   const sel = selected ? graph.nodes.find((n) => n.id === selected) : null;
+  const duplicates = useMemo(() => similarTopics(graph.nodes), [graph]);
+  // Merge targets for the selected topic: most similar names first.
+  const targets = useMemo(
+    () =>
+      sel
+        ? graph.nodes
+            .filter((n) => n.id !== sel.id)
+            .map((n) => ({ n, s: topicSimilarity(sel.label, n.label) }))
+            .sort((a, b) => b.s - a.s || Number(b.n.learned) - Number(a.n.learned) || a.n.label.localeCompare(b.n.label))
+            .map((x) => x.n)
+        : [],
+    [graph, sel],
+  );
+  const doMerge = (from: string, into: string) =>
+    merge.mutate(
+      { from, into, entries, links },
+      {
+        onSuccess: (r) => {
+          toast.success(`Merged “${from}” into “${into}”${r.entries ? ` · ${r.entries} entr${r.entries === 1 ? "y" : "ies"} updated` : ""}`);
+          setSelected(into.trim().toLowerCase().replace(/\s+/g, " "));
+          setMergeInto("");
+        },
+        onError: (e) => toast.error((e as Error).message),
+      },
+    );
 
   const mapPast = async () => {
     let left = unmapped.slice(0, 30);
@@ -83,6 +112,17 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
           <Network className="h-3.5 w-3.5 text-accent" /> Learning map
         </span>
       </SectionTitle>
+
+      {duplicates.length ? (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
+          <span>Looks like the same topic:</span>
+          {duplicates.map((d) => (
+            <Button key={`${d.a.id}>${d.b.id}`} size="xs" variant="secondary" loading={merge.isPending && merge.variables?.from === d.a.label} onClick={() => doMerge(d.a.label, d.b.label)}>
+              <Combine className="h-3 w-3" /> Merge “{d.a.label}” into “{d.b.label}”
+            </Button>
+          ))}
+        </div>
+      ) : null}
 
       {!shown.nodes.length ? (
         <p className="text-[12.5px] text-muted">Each entry you log gets linked to its topics — what it builds on and what it leads to. Log something (or map your past entries) to see the map grow.</p>
@@ -137,7 +177,7 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
               })}
             </svg>
           </div>
-          <p className="mt-1 text-[11.5px] text-faint">Filled dots: learned (darker = stronger, from time spent and flashcard recall). Dashed: next topics. Arrows point from a topic to what builds on it.</p>
+          <p className="mt-1 text-[11.5px] text-faint">Filled dots: learned (darker = stronger, from time spent, entries, flashcard recall and your confidence ratings). Dashed: next topics. Arrows point from a topic to what builds on it.</p>
         </>
       )}
 
@@ -154,6 +194,7 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
           <div className="mt-1 text-muted">
             {sel.learned ? `${Math.round(sel.minutes)} min over ${sel.entries.length} entr${sel.entries.length === 1 ? "y" : "ies"} · strength ${Math.round(sel.strength * 100)}%` : "Not learned yet"}
             {sel.recall != null ? ` · flashcard recall ${Math.round(sel.recall * 100)}%` : ""}
+            {sel.confidence != null ? ` · your confidence ${sel.confidence}/5` : ""}
             {sel.relevance != null ? ` · job relevance ${sel.relevance}` : ""}
           </div>
           {graph.edges.filter((e) => e.to === sel.id && e.kind === "prereq").length ? (
@@ -164,6 +205,23 @@ export function LearningMap({ onLogTopic }: { onLogTopic?: (topic: string) => vo
           {graph.edges.filter((e) => e.from === sel.id && e.kind === "prereq").length ? (
             <div className="text-fg-2">
               Leads to: {graph.edges.filter((e) => e.from === sel.id && e.kind === "prereq").map((e) => graph.nodes.find((n) => n.id === e.to)?.label).join(", ")}
+            </div>
+          ) : null}
+          {targets.length ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-muted">Same as another topic?</span>
+              <Select value={mergeInto} onChange={(e) => setMergeInto(e.target.value)} className="h-7 w-auto max-w-[220px] py-0.5 text-[12px]" aria-label={`Merge ${sel.label} into`}>
+                <option value="">Merge into…</option>
+                {targets.slice(0, 40).map((n) => (
+                  <option key={n.id} value={n.label}>
+                    {n.label}
+                    {n.learned ? "" : " (not learned yet)"}
+                  </option>
+                ))}
+              </Select>
+              <Button size="xs" variant="secondary" disabled={!mergeInto} loading={merge.isPending} onClick={() => doMerge(sel.label, mergeInto)}>
+                <Combine className="h-3 w-3" /> Merge
+              </Button>
             </div>
           ) : null}
           {sel.entries.length ? (

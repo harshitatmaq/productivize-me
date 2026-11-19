@@ -3,7 +3,20 @@ import { Fragment, type ReactNode } from "react";
 /** Tiny, safe markdown subset (bold, italics, strikethrough, code, links, lists, checklists, quotes, headings). No HTML injection. */
 function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|~~[^~]+~~|`[^`]+`|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|\*[^*\s][^*]*\*|_[^_\s][^_]*_)/g;
+  // Emphasis follows the usual markdown rules: the opening marker is followed by a non-space and the
+  // closing one preceded by a non-space, so "a * b" (multiplication) stays plain text inside or outside
+  // italics, and underscores inside words (snake_case) are never emphasis.
+  const re = new RegExp(
+    [
+      String.raw`\*\*(?![\s*])(?:[^*\n]|\s\*(?=\s))+?\*\*`, // **bold**
+      String.raw`~~(?!\s)[^~\n]+?~~`, // ~~strike~~
+      String.raw`\x60[^\x60]+\x60`, // `code`
+      String.raw`\[[^\]]+\]\((https?:\/\/[^)\s]+)\)`, // [link](url)
+      String.raw`\*(?![\s*])(?:[^*\n]|\s\*(?=\s))*?[^\s*]\*|\*[^\s*]\*`, // *italic*
+      String.raw`(?<![A-Za-z0-9_])_(?![\s_])(?:[^_\n])*?[^\s_]_(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])_[^\s_]_(?![A-Za-z0-9_])`, // _italic_
+    ].join("|"),
+    "g",
+  );
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -17,7 +30,7 @@ function inline(text: string, keyBase: string): ReactNode[] {
     else if (tok.startsWith("[")) {
       const label = tok.slice(1, tok.indexOf("]"));
       out.push(
-        <a key={key} href={m[2]} target="_blank" rel="noreferrer">
+        <a key={key} href={m[1]} target="_blank" rel="noreferrer">
           {label}
         </a>,
       );

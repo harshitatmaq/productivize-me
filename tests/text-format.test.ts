@@ -148,6 +148,20 @@ describe("markdown display", () => {
     expect(out).toContain("<pre><code>df.cache()</code></pre>");
   });
 
+  it("keeps multiplication asterisks as text (italic only with markers hugging the words)", () => {
+    const out = html("*Cost = number of workers working hours they work * cost of workers per hour*");
+    expect(out).toContain("<em>Cost = number of workers working hours they work * cost of workers per hour</em>");
+    expect(html("cost = workers * hours * rate")).toContain("cost = workers * hours * rate");
+    expect(html("**a * b** and *x*")).toContain("<strong>a * b</strong> and <em>x</em>");
+  });
+
+  it("doesn't italicise inside snake_case words, and links still work", () => {
+    expect(html("use spark_sql_shuffle_partitions here")).toContain("spark_sql_shuffle_partitions");
+    expect(html("use spark_sql_shuffle_partitions here")).not.toContain("<em>");
+    expect(html("an _important_ point")).toContain("<em>important</em>");
+    expect(html("see [docs](https://spark.apache.org/docs) now")).toContain('<a href="https://spark.apache.org/docs"');
+  });
+
   it("never renders HTML from the text", () => {
     expect(html("<img src=x onerror=alert(1)> **hi**")).toContain("&lt;img");
   });

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { LearningEntry } from "@/lib/types";
 import { api } from "@/lib/utils";
+import { mergeTopicPlan, type MapLink, type MergeEntry } from "@/lib/learning-map";
 import { sb, unwrap } from "./client";
 
 const KEY = ["learning"];
@@ -65,3 +66,35 @@ export function useConnectEntries() {
   });
 }
 
+
+/** Learning map → Merge: renames a topic into another across your entries and topic links. */
+export function useMergeTopics() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ from, into, entries, links }: { from: string; into: string; entries: MergeEntry[]; links: MapLink[] }) => {
+      const plan = mergeTopicPlan(entries, links, from, into);
+      for (const u of plan.entryUpdates) {
+        unwrap(await sb().from("learning_entries").update({ topics: u.topics, connections: u.connections }).eq("id", u.id));
+      }
+      for (const d of plan.linkDeletes) {
+        unwrap(await sb().from("topic_links").delete().eq("from_topic", d.from_topic).eq("to_topic", d.to_topic));
+      }
+      if (plan.linkInserts.length) {
+        const { data: u } = await sb().auth.getUser();
+        unwrap(
+          await sb()
+            .from("topic_links")
+            .upsert(
+              plan.linkInserts.map((l) => ({ user_id: u.user!.id, from_topic: l.from_topic, to_topic: l.to_topic, kind: l.kind, why: l.why ?? null })),
+              { onConflict: "user_id,from_topic,to_topic", ignoreDuplicates: true },
+            ),
+        );
+      }
+      return { entries: plan.entryUpdates.length };
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: KEY });
+      qc.invalidateQueries({ queryKey: ["topic-links"] });
+    },
+  });
+}

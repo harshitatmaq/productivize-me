@@ -26,6 +26,7 @@ import { dateLabel } from "@/components/tasks/task-utils";
 import { AiLinkButtons, chatgptUrl, claudeUrl, PROMPTS } from "./ai-links";
 import { Heatmap } from "./heatmap";
 import { usePageShortcuts } from "@/lib/shortcuts";
+import { EditButton } from "@/components/ui/edit-button";
 
 type Draft = {
   id?: string;
@@ -73,10 +74,22 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
   const [open, setOpen] = useState(false);
   const long = (e.content ?? "").length > 280;
   return (
-    <Card className="p-4">
+    <Card
+      className="p-4 outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      tabIndex={0}
+      aria-label={`${e.title} — press E to edit`}
+      onKeyDown={(ev) => {
+        if (ev.target === ev.currentTarget && ev.key.toLowerCase() === "e" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+          ev.preventDefault();
+          onEdit();
+        }
+      }}
+    >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-medium text-fg">{e.title}</h3>
+          <h3 className="text-[14px] font-medium text-fg" onDoubleClick={onEdit}>
+            {e.title}
+          </h3>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
             {e.minutes ? (
               <span className="inline-flex items-center gap-1">
@@ -103,6 +116,7 @@ function EntryCard({ e, onEdit }: { e: LearningEntry; onEdit: () => void }) {
             </div>
           ) : null}
         </div>
+        <EditButton onClick={onEdit} label="Edit entry" className="-mr-1.5" />
         <Menu
           label="More actions — continue with AI, flashcards, share, edit"
           trigger={
@@ -195,6 +209,7 @@ export function LearningView() {
   usePageShortcuts("learning", "Learning", [
     { key: "n", label: "Log learning", run: () => setDraft(blank()) },
     { key: "r", label: "Review flashcards", run: () => setReviewing(true) },
+    { keys: ["E"], label: "Edit the focused entry (Tab to it, or double-click its title)" },
     { keys: ["Space"], label: "Show the answer (while reviewing)" },
     { keys: ["1–4"], label: "Again / Hard / Good / Easy (while reviewing)" },
   ]);
