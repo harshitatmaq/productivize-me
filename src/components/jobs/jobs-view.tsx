@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Briefcase, Compass, MessageSquareText, Radar, Search, Sparkles, Wifi } from "lucide-react";
 import { AnimatePresence } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNow } from "@/lib/hooks";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import { ProfileEditor } from "./profile-editor";
 import { ScoutChat } from "./scout-chat";
 import { SearchPanel } from "./search-panel";
 import { TrackerBoard } from "./tracker-board";
+import { usePageShortcuts } from "@/lib/shortcuts";
 
 type Tab = "matches" | "search" | "tracker" | "answers" | "profile" | "activity";
 
@@ -48,6 +49,7 @@ export function JobsView() {
   const [sort, setSort] = useState<"best" | "new">("best");
   const [view, setView] = useState<"new" | "saved" | "all">("new");
   const [searching, setSearching] = useState(false);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   // Deep link /jobs?job=<id> (from the Today rail and notifications)
   const deepJob = deepJobId ? (jobs.find((x) => x.id === deepJobId) ?? null) : null;
@@ -92,6 +94,12 @@ export function JobsView() {
   const running = !!liveRun;
   const liveFound = liveRun ? jobs.filter((j) => j.created_at >= liveRun.started_at && !j.search_id).length : 0;
 
+  const TABS: Tab[] = ["matches", "search", "tracker", "answers", "profile", "activity"];
+  usePageShortcuts("jobs", "Jobs", [
+    { key: "s", label: "Search now", run: () => !searching && !running && ready && void searchNow() },
+    { key: "/", label: "Filter matches", run: () => (tab === "matches" ? filterRef.current?.focus() : changeTab("matches")) },
+    ...TABS.map((t, i) => ({ key: String(i + 1), label: `Tab: ${["Matches", "Search & ask", "Tracker", "Answer bank", "Profile & Scout", "Activity"][i]}`, run: () => changeTab(t) })),
+  ]);
   const searchNow = async () => {
     setSearching(true);
     const t = toast.loading("Searching job boards, career pages and the web… (up to a few minutes)");
@@ -169,7 +177,7 @@ export function JobsView() {
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <div className="relative min-w-[200px] flex-1">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by title, company, location…" className="field h-8 pl-8" />
+                <input ref={filterRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by title, company, location…" className="field h-8 pl-8" />
               </div>
               <Segmented
                 size="sm"

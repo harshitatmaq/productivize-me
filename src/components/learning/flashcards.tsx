@@ -138,19 +138,28 @@ export function ReviewDialog({ open, onOpenChange }: { open: boolean; onOpenChan
 function EditCard({ card, onSave, onCancel }: { card?: Flashcard; onSave: (front: string, back: string) => void; onCancel: () => void }) {
   const [front, setFront] = useState(card?.front ?? "");
   const [back, setBack] = useState(card?.back ?? "");
+  const canSave = !!front.trim() && !!back.trim();
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canSave) {
+          e.preventDefault();
+          onSave(front.trim(), back.trim());
+        }
+      }}
+    >
       <Field label="Question">
-        <Textarea rows={3} value={front} onChange={(e) => setFront(e.target.value)} autoFocus />
+        <Textarea markdown hint={false} rows={3} value={front} onChange={(e) => setFront(e.target.value)} autoFocus />
       </Field>
       <Field label="Answer">
-        <Textarea rows={4} value={back} onChange={(e) => setBack(e.target.value)} />
+        <Textarea markdown rows={4} value={back} onChange={(e) => setBack(e.target.value)} />
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={!front.trim() || !back.trim()} onClick={() => onSave(front.trim(), back.trim())}>
+        <Button variant="primary" disabled={!canSave} onClick={() => onSave(front.trim(), back.trim())}>
           Save card
         </Button>
       </div>

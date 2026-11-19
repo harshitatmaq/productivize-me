@@ -216,6 +216,12 @@ Setup for Windows, Oracle (Docker) and the Gmail label: [worker/README.md](worke
 
 **Learning nudges.** At your learning reminder time (default 21:30), if nothing is logged for today, you get a nudge that knows your weekly goal (e.g. *"3/5 this week. You need every remaining day."*). You can stop the nudges once the goal is met.
 
+**Keyboard shortcuts.** Press **Ctrl+/** (⌘/ on a Mac) or **?** anywhere outside a text field or dialog to see every shortcut, including the ones for the page you're on.
+- Everywhere: **Ctrl+K** command menu, **C** new task, **G then a letter** to go to a page (G T Today, G J Jobs, G L Learning, G H Habits…).
+- Pages: Today **P** plan my day, **D** describe your day · Learning **N** log learning, **R** review flashcards (Space shows the answer, 1–4 rates it) · Jobs **S** search now, **/** filter, **1–6** switch tabs.
+- Writing (learning entries, flashcards, task / job / reminder notes): **Ctrl+B** bold, **Ctrl+I** italic, **Ctrl+E** code, **Ctrl+K** link, **Ctrl+Shift+X** strikethrough, **Ctrl+Shift+8 / 7 / 9** bulleted / numbered / checklist, **Ctrl+Shift+.** quote, **Ctrl+Alt+1–3** headings. Pressing it again removes the formatting; Enter continues a list (Enter on an empty item ends it), Tab indents list items, and Ctrl+Z undoes formatting like any typing. Learning entries and flashcards display the markdown (headings, quotes, checklists, code blocks).
+- Dialogs: **Ctrl+Enter** saves (learning entry, task, reminder, flashcard, describe your day, job tracking notes), **Esc** closes.
+
 ## Security
 
 - Every table has Row Level Security: each user can only read or write their own rows. The public portfolio is readable only when you publish it.

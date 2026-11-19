@@ -15,6 +15,7 @@ import { useCreateTasks } from "@/lib/queries/tasks";
 import { api, cn } from "@/lib/utils";
 import { useVoiceInput } from "@/lib/voice";
 import { dateLabel, describeRecurrence, formatTime, localIso, PRIORITY_COLOR } from "@/components/tasks/task-utils";
+import { usePageShortcuts } from "@/lib/shortcuts";
 
 const nowParts = () => {
   const d = new Date();
@@ -109,6 +110,12 @@ export function DescribeDayDialog({ open, onOpenChange, initialText = "" }: { op
       open={open}
       onOpenChange={(o) => (o ? onOpenChange(true) : close())}
       title="Describe your day"
+      onSubmit={() => {
+        if (loading || create.isPending) return;
+        if (drafts) {
+          if (chosen.length) addAll();
+        } else if (text.trim().length >= 3) void ask(false);
+      }}
       description={drafts ? summary || "Check the list, then add it." : "Write (or say) everything you need to do, in one go. The AI turns it into tasks and asks if something's unclear."}
       size="lg"
       footer={
@@ -255,6 +262,7 @@ export function DescribeDayDialog({ open, onOpenChange, initialText = "" }: { op
 
 export function DescribeDayButton() {
   const [open, setOpen] = useState(false);
+  usePageShortcuts("describe-day", "Today", [{ key: "d", label: "Describe your day (turn it into tasks)", run: () => setOpen(true) }]);
   return (
     <>
       <Tip content="Describe your whole day in one message — the AI makes the tasks">

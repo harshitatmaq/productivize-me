@@ -31,6 +31,7 @@ export function useNowMinutes(): number {
 export function useHotkey(key: string, handler: (e: KeyboardEvent) => void, opts: { meta?: boolean } = {}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return; // e.g. Ctrl+K used for a link inside a note
       const target = e.target as HTMLElement | null;
       const typing = target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
       if (opts.meta) {

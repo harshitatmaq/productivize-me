@@ -84,6 +84,7 @@ export function TaskEditor() {
       onOpenChange={(o) => !o && editTask(null)}
       title="Edit task"
       size="md"
+      onSubmit={save}
       footer={
         <>
           <Button
@@ -125,7 +126,7 @@ export function TaskEditor() {
           className="w-full bg-transparent text-[17px] font-medium text-fg outline-none placeholder:text-faint"
           placeholder="Task name"
         />
-        <Textarea value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} placeholder="Notes, links, sub-steps…" rows={3} />
+        <Textarea markdown hint={false} value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} placeholder="Notes, links, sub-steps…" rows={3} />
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Date">

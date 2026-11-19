@@ -285,6 +285,7 @@ export function RemindersView() {
         open={!!draft}
         onOpenChange={(o) => !o && setDraft(null)}
         title={draft?.id ? "Edit reminder" : "New reminder"}
+        onSubmit={() => !save.isPending && submit()}
         footer={
           <>
             <Button variant="ghost" onClick={() => setDraft(null)}>
@@ -366,7 +367,7 @@ export function RemindersView() {
               )}
             </div>
             <Field label="Notes (shown in the notification)">
-              <Textarea rows={2} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
+              <Textarea markdown hint={false} rows={2} value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} />
             </Field>
             <Field label="Open this link when tapped (optional)" hint="e.g. /jobs, /learning, or any https:// URL">
               <Input value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} placeholder="/learning" />
