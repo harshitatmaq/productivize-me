@@ -13,6 +13,7 @@ import { Badge, Segmented } from "@/components/ui/misc";
 import { useDeleteJob, useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { api, cn, timeAgo } from "@/lib/utils";
+import { celebrate } from "@/lib/celebrate";
 import type { JobAnalysis } from "@/lib/jobs/types";
 import { CompanyLogo, FitBreakdown, MarkClosedButton, RepostBadge, requirementsLabel, ScoreBadge, sourceLabel, STATUS_META, WatchCompanyButton } from "./job-bits";
 import { JobFeedback } from "./job-feedback";
@@ -79,11 +80,13 @@ export function JobDrawer({ job, onClose }: { job: Job | null; onClose: () => vo
     }
   };
 
-  const setStatus = (status: Job["status"]) =>
+  const setStatus = (status: Job["status"]) => {
+    if (status === "applied" && job.status !== "applied") celebrate();
     update.mutate({
       id: job.id,
       patch: { status, ...(status === "applied" && !job.applied_at ? { applied_at: new Date().toISOString() } : {}) },
     });
+  };
 
   const saveTracking = () =>
     update.mutate(

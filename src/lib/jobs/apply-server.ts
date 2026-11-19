@@ -9,9 +9,13 @@ import { memoryContext } from "@/lib/memory/personal";
 import {
   COMMON_FORM,
   fillForm,
+  ashbyFields,
   greenhouseFields,
+  leverFields,
   packStats,
+  parseAshbyUrl,
   parseGreenhouseUrl,
+  parseLeverUrl,
   pickOption,
   standardFor,
   type BankEntry,
@@ -25,12 +29,12 @@ import { postingText } from "@/lib/jobs/integrity";
 export type TimelineEvent = { at: string; kind: "prepared" | "resume" | "applied" | "received" | "interview" | "rejected" | "offer" | "note"; text: string };
 export type Application = {
   job_id: string;
-  form_source: "greenhouse" | "common";
+  form_source: FormSource;
   apply_url: string | null;
   fields: PackField[];
   cover_letter: string | null;
   resume: unknown;
-  submitted: { at: string; fields: { label: string; answer: string }[]; cover_letter: string | null } | null;
+  submitted: { at: string; fields: { label: string; answer: string }[]; cover_letter: string | null; channel?: string } | null;
   timeline: TimelineEvent[];
   prepared_at: string | null;
   applied_at: string | null;
@@ -46,8 +50,21 @@ const stripHtml = (html: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** The real form for Greenhouse jobs (official public API); otherwise the common questions. */
-async function readForm(url: string): Promise<{ source: "greenhouse" | "common"; fields: FormField[]; description?: string }> {
+export type FormSource = "greenhouse" | "ashby" | "lever" | "common";
+
+const ASHBY_QUERY = `query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
+  jobPosting(organizationHostedJobsPageName: $organizationHostedJobsPageName, jobPostingId: $jobPostingId) {
+    id
+    title
+    applicationForm { sections { fieldEntries { ... on FormFieldEntry { id field isRequired } } } }
+  }
+}`;
+
+/**
+ * The company's real form: Greenhouse (official public API), Ashby (its public job board API)
+ * and Lever (its public apply page). Anything else, or any failure, uses the common questions.
+ */
+async function readForm(url: string): Promise<{ source: FormSource; fields: FormField[]; description?: string }> {
   const gh = parseGreenhouseUrl(url);
   if (gh) {
     try {
@@ -59,6 +76,39 @@ async function readForm(url: string): Promise<{ source: "greenhouse" | "common";
       }
     } catch {
       // fall back to the common questions
+    }
+  }
+  const ab = parseAshbyUrl(url);
+  if (ab) {
+    try {
+      const res = await fetch("https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ operationName: "ApiJobPosting", variables: { organizationHostedJobsPageName: ab.board, jobPostingId: ab.id }, query: ASHBY_QUERY }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { data?: { jobPosting?: { applicationForm?: { sections?: Parameters<typeof ashbyFields>[0] } } | null } };
+        const fields = ashbyFields(body.data?.jobPosting?.applicationForm?.sections);
+        if (fields.length >= 2) return { source: "ashby", fields };
+      }
+    } catch {
+      // fall back
+    }
+  }
+  const lv = parseLeverUrl(url);
+  if (lv) {
+    try {
+      const res = await fetch(`https://jobs.${lv.eu ? "eu." : ""}lever.co/${encodeURIComponent(lv.site)}/${lv.id}/apply`, {
+        headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0 (compatible; Productivize/1.0)" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const fields = leverFields((await res.text()).slice(0, 600_000));
+        if (fields.length >= 3) return { source: "lever", fields };
+      }
+    } catch {
+      // fall back
     }
   }
   return { source: "common", fields: COMMON_FORM };
@@ -162,7 +212,7 @@ export async function preparePack(supabase: SupabaseClient, user: Who, jobId: st
 
   const stats = packStats(fields);
   const now = new Date().toISOString();
-  const event: TimelineEvent = { at: now, kind: "prepared", text: `${form.source === "greenhouse" ? "Read the company's form" : "Used common questions"} · ${stats.answered}/${stats.total} answered${stats.needYou ? ` · ${stats.needYou} need you` : ""}` };
+  const event: TimelineEvent = { at: now, kind: "prepared", text: `${form.source !== "common" ? "Read the company's form" : "Used common questions"} · ${stats.answered}/${stats.total} answered${stats.needYou ? ` · ${stats.needYou} need you` : ""}` };
   const row = {
     job_id: job.id,
     user_id: user.id,
@@ -173,14 +223,18 @@ export async function preparePack(supabase: SupabaseClient, user: Who, jobId: st
     prepared_at: now,
     timeline: [...((existing?.timeline ?? []) as TimelineEvent[]), event].slice(-50),
   };
-  const { data, error } = await supabase.from("applications").upsert(row, { onConflict: "job_id" }).select("*").single();
+  let { data, error } = await supabase.from("applications").upsert(row, { onConflict: "job_id" }).select("*").single();
+  if (error && /form_source/.test(error.message) && row.form_source !== "common") {
+    // Database without part 9 of the 0005 migration yet: store the form as "common" (fields are kept).
+    ({ data, error } = await supabase.from("applications").upsert({ ...row, form_source: "common" }, { onConflict: "job_id" }).select("*").single());
+  }
   if (error) throw new Error(`${error.message} (did you run supabase/migrations/0005_planning_health_chat_memory.sql?)`);
   if (job.status === "new") await supabase.from("jobs").update({ status: "saved" }).eq("id", job.id).eq("user_id", user.id);
   return data as Application;
 }
 
 /** Mark applied: snapshot what you submitted, remember new answers, move the job to Applied. */
-export async function markApplied(supabase: SupabaseClient, user: Who, jobId: string): Promise<Application> {
+export async function markApplied(supabase: SupabaseClient, user: Who, jobId: string, channel?: string): Promise<Application> {
   const { data: app } = await supabase.from("applications").select("*").eq("job_id", jobId).eq("user_id", user.id).maybeSingle();
   const now = new Date().toISOString();
   const fields = ((app?.fields ?? []) as PackField[]).filter((f) => f.type !== "file");
@@ -201,7 +255,7 @@ export async function markApplied(supabase: SupabaseClient, user: Who, jobId: st
     job_id: jobId,
     user_id: user.id,
     applied_at: now,
-    submitted: { at: now, fields: fields.map((f) => ({ label: f.label, answer: f.answer })), cover_letter: (app?.cover_letter as string | null) ?? null },
+    submitted: { at: now, fields: fields.map((f) => ({ label: f.label, answer: f.answer })), cover_letter: (app?.cover_letter as string | null) ?? null, ...(channel ? { channel } : {}) },
     timeline: [...((app?.timeline ?? []) as TimelineEvent[]), { at: now, kind: "applied", text: learn.length ? `Applied · ${learn.length} new answer${learn.length > 1 ? "s" : ""} saved to your answer bank` : "Applied" }].slice(-50),
   };
   const { data, error } = await supabase.from("applications").upsert(row, { onConflict: "job_id" }).select("*").single();

@@ -372,6 +372,12 @@ describe("applications", () => {
     expect((await one<{ answer: string }>(`select answer from public.answer_bank where key = 'phone'`)).answer).toBe("+91 8");
     await db.exec(`insert into public.applications (job_id, form_source, fields) values ('${job.id}', 'greenhouse', '[{"id":"f","label":"Phone","answer":"+91 8"}]')`);
     await expect(db.exec(`insert into public.answer_bank (key, question, category) values ('x', 'y', 'astrology')`)).rejects.toThrow();
+    // Part 9: Ashby and Lever forms; anything else is rejected.
+    await db.exec(`update public.applications set form_source = 'lever' where job_id = '${job.id}'`);
+    await db.exec(`update public.applications set form_source = 'ashby' where job_id = '${job.id}'`);
+    await expect(db.exec(`update public.applications set form_source = 'workday' where job_id = '${job.id}'`)).rejects.toThrow();
+    // Part 8: job signals.
+    await db.exec(`update public.jobs set signals = '{"fit":{"skills":80,"experience":70,"location":100,"growth":60},"reposts":["h1"]}' where id = '${job.id}'`);
 
     await db.exec(`reset role`);
     await asUser(u2);

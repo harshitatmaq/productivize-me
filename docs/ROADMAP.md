@@ -245,6 +245,6 @@ All background AI work goes through **one Supabase queue** (`agent_jobs`): type,
 
 ## Open items
 
-- Verify Ashby's form specification without auth, and Lever apply-page parsing, on real postings.
+- Ashby (public job-board API) and Lever (apply page) forms are read now, with a fallback to common questions; verify on real postings once deployed (not reachable from the build sandbox).
 - Measure how much JobSpy's LinkedIn source returns from the PC worker vs. the VM before relying on it.
 - Workday: how far a common field set gets before account-specific questions.

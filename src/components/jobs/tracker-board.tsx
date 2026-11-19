@@ -12,6 +12,7 @@ import { useAddJob, useUpdateJob } from "@/lib/queries/jobs";
 import type { Job } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { CompanyLogo, STATUS_META } from "./job-bits";
+import { celebrate } from "@/lib/celebrate";
 
 const COLUMNS: Job["status"][] = ["saved", "applied", "interviewing", "offer", "rejected"];
 
@@ -62,6 +63,7 @@ export function TrackerBoard({ jobs, onOpen }: { jobs: Job[]; onOpen: (j: Job) =
   const move = (id: string, status: Job["status"]) => {
     const job = jobs.find((j) => j.id === id);
     if (!job || job.status === status) return;
+    if (status === "applied" || status === "offer") celebrate();
     update.mutate({
       id,
       patch: { status, ...(status === "applied" && !job.applied_at ? { applied_at: new Date().toISOString() } : {}) },

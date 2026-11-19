@@ -20,11 +20,14 @@ export function useApplication(jobId: string | null) {
 export function useApplicationAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { jobId: string; action: "prepare" | "applied" }) => api<{ application: Application }>("/api/jobs/application", { json: v }),
+    mutationFn: (v: { jobId: string; action: "prepare" | "applied"; channel?: string }) => api<{ application: Application }>("/api/jobs/application", { json: v }),
     onSuccess: (r, v) => {
       qc.setQueryData(appKey(v.jobId), r.application);
       qc.invalidateQueries({ queryKey: ["jobs"] });
-      if (v.action === "applied") qc.invalidateQueries({ queryKey: ["answer-bank"] });
+      if (v.action === "applied") {
+        qc.invalidateQueries({ queryKey: ["answer-bank"] });
+        qc.invalidateQueries({ queryKey: ["application-summaries"] });
+      }
     },
   });
 }
@@ -60,5 +63,18 @@ export function useDeleteAnswer() {
   return useMutation({
     mutationFn: async (id: string) => unwrap(await sb().from("answer_bank").delete().eq("id", id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["answer-bank"] }),
+  });
+}
+
+/** Every application's outcome facts, for "What's working" (small columns only). */
+export function useApplicationSummaries() {
+  return useQuery({
+    queryKey: ["application-summaries"],
+    queryFn: async () => {
+      const rows = unwrap(
+        await sb().from("applications").select("job_id, applied_at, timeline, channel:submitted->>channel, resume_name:resume->>name").limit(1000),
+      ) as { job_id: string; applied_at: string | null; timeline: { at: string; kind: string }[] | null; channel: string | null; resume_name: string | null }[];
+      return rows.map((r) => ({ job_id: r.job_id, applied_at: r.applied_at, timeline: r.timeline, channel: r.channel, tailored: !!r.resume_name }));
+    },
   });
 }

@@ -24,6 +24,7 @@ import { ProfileEditor } from "./profile-editor";
 import { ScoutChat } from "./scout-chat";
 import { SearchPanel } from "./search-panel";
 import { TrackerBoard } from "./tracker-board";
+import { WhatsWorking } from "./whats-working";
 import { usePageShortcuts } from "@/lib/shortcuts";
 
 type Tab = "matches" | "search" | "tracker" | "answers" | "profile" | "activity";
@@ -248,7 +249,12 @@ export function JobsView() {
 
       {tab === "search" ? <SearchPanel jobs={jobs} onOpen={setOpen} /> : null}
 
-      {tab === "tracker" ? <TrackerBoard jobs={tracked} onOpen={setOpen} /> : null}
+      {tab === "tracker" ? (
+        <>
+          <WhatsWorking jobs={jobs} onOpen={setOpen} />
+          <TrackerBoard jobs={tracked} onOpen={setOpen} />
+        </>
+      ) : null}
 
       {tab === "answers" ? <AnswerBank profile={(row?.profile ?? {}) as JobProfile} /> : null}
 
