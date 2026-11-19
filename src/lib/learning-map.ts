@@ -3,7 +3,7 @@
  * and what to learn next. Pure (computed in the browser from your own data).
  */
 
-export type MapEntry = { id: string; title: string; entry_date: string; minutes: number | null; topics?: string[] };
+export type MapEntry = { id: string; title: string; entry_date: string; minutes: number | null; topics?: string[]; confidence?: number | null };
 export type MapLink = { from_topic: string; to_topic: string; kind: "prereq" | "related"; why?: string | null };
 export type MapCard = { entry_id: string | null; tags: string[]; reps: number; lapses: number };
 export type MapInterest = { name: string; job_relevance: number | null; status: string };
@@ -15,6 +15,8 @@ export type MapNode = {
   entries: { id: string; title: string; entry_date: string }[];
   /** 0-1 share of this topic's flashcards you remember well; null without cards. */
   recall: number | null;
+  /** Your average confidence rating (1-5) on this topic's entries; null when you didn't rate them. */
+  confidence: number | null;
   /** 0 (not learned yet) … 1 (strong). */
   strength: number;
   learned: boolean;
@@ -29,10 +31,11 @@ export function buildGraph(input: { entries: MapEntry[]; links: MapLink[]; cards
   const nodes = new Map<string, MapNode>();
   const node = (label: string) => {
     const id = norm(label);
-    if (!nodes.has(id)) nodes.set(id, { id, label: label.trim(), minutes: 0, entries: [], recall: null, strength: 0, learned: false, relevance: null });
+    if (!nodes.has(id)) nodes.set(id, { id, label: label.trim(), minutes: 0, entries: [], recall: null, confidence: null, strength: 0, learned: false, relevance: null });
     return nodes.get(id)!;
   };
   const topicsOfEntry = new Map<string, string[]>();
+  const ratings = new Map<string, number[]>();
   for (const e of input.entries) {
     const ts = (e.topics ?? []).filter(Boolean);
     topicsOfEntry.set(e.id, ts.map(norm));
@@ -41,6 +44,7 @@ export function buildGraph(input: { entries: MapEntry[]; links: MapLink[]; cards
       n.minutes += (e.minutes ?? 0) / Math.max(1, ts.length);
       n.entries.push({ id: e.id, title: e.title, entry_date: e.entry_date });
       n.learned = true;
+      if (e.confidence) ratings.set(n.id, [...(ratings.get(n.id) ?? []), e.confidence]);
     }
   }
   const edges: MapEdge[] = [];
@@ -68,10 +72,14 @@ export function buildGraph(input: { entries: MapEntry[]; links: MapLink[]; cards
     const r = recall.get(n.id);
     n.recall = r && r.total ? r.good / r.total : null;
     n.relevance = relevance.get(n.id) ?? null;
+    const rated = ratings.get(n.id);
+    n.confidence = rated?.length ? Math.round((rated.reduce((a, b) => a + b, 0) / rated.length) * 10) / 10 : null;
     if (n.learned) {
       const time = Math.min(1, Math.log1p(n.minutes) / Math.log1p(600)); // ~10h is "a lot"
       const practice = Math.min(1, n.entries.length / 5);
-      n.strength = Math.min(1, 0.15 + 0.35 * time + 0.2 * practice + 0.3 * (n.recall ?? 0.5));
+      // How well you know it: flashcard recall (measured) and your own confidence rating (1-5).
+      const self = n.confidence != null ? (n.confidence - 1) / 4 : null;
+      n.strength = Math.min(1, 0.15 + 0.3 * time + 0.15 * practice + 0.2 * (n.recall ?? self ?? 0.5) + 0.2 * (self ?? n.recall ?? 0.5));
     }
   }
   return { nodes: [...nodes.values()], edges };
@@ -165,4 +173,94 @@ export function layoutGraph(nodes: MapNode[], edges: MapEdge[], w: number, h: nu
   const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const fit = (v: number, lo: number, hi: number, a: number, b: number) => (hi - lo < 1 ? (a + b) / 2 : a + ((v - lo) / (hi - lo)) * (b - a));
   return new Map([...pos].map(([id, p]) => [id, { x: fit(p.x, minX, maxX, 70, w - 70), y: fit(p.y, minY, maxY, 30, h - 24) }]));
+}
+
+// ---------------------------------------------------------------------------
+// Merging topics: the AI sometimes names one concept two ways
+// ("Spark Optimization" / "Spark Performance Tuning").
+// ---------------------------------------------------------------------------
+
+const SAME_WORD: Record<string, string> = {
+  tuning: "optimization",
+  optimisation: "optimization",
+  optimizing: "optimization",
+  optimize: "optimization",
+  performance: "optimization",
+  perf: "optimization",
+  db: "database",
+  databases: "database",
+  ml: "machine learning",
+  js: "javascript",
+  ts: "typescript",
+  k8s: "kubernetes",
+};
+const FILLER = new Set(["basics", "fundamentals", "intro", "introduction", "advanced", "concepts", "overview", "101", "in", "of", "and", "the", "for", "with", "using", "to", "a", "an"]);
+
+function topicWords(label: string): Set<string> {
+  const words = norm(label)
+    .split(/[^a-z0-9+#]+/)
+    .filter((w) => w && !FILLER.has(w))
+    .map((w) => SAME_WORD[w] ?? (w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .filter((w) => !FILLER.has(w));
+  return new Set(words);
+}
+
+/** How alike two topic names are (0-1), ignoring filler words and treating "tuning" = "optimization" etc. */
+export function topicSimilarity(a: string, b: string): number {
+  const A = topicWords(a);
+  const B = topicWords(b);
+  if (!A.size || !B.size) return 0;
+  const inter = [...A].filter((w) => B.has(w)).length;
+  return inter / new Set([...A, ...B]).size;
+}
+
+/** Topic pairs that look like the same concept (at least one learned), most alike first. */
+export function similarTopics(nodes: MapNode[], max = 3, min = 0.6): { a: MapNode; b: MapNode; score: number }[] {
+  const out: { a: MapNode; b: MapNode; score: number }[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const [x, y] = [nodes[i], nodes[j]];
+      if (!x.learned && !y.learned) continue;
+      const score = topicSimilarity(x.label, y.label);
+      if (score < min) continue;
+      // Merge the smaller topic into the bigger one.
+      const [a, b] = x.entries.length > y.entries.length || (x.entries.length === y.entries.length && x.minutes >= y.minutes) ? [y, x] : [x, y];
+      out.push({ a, b, score });
+    }
+  }
+  return out.sort((p, q) => q.score - p.score).slice(0, max);
+}
+
+export type MergeEntry = { id: string; topics?: string[] | null; connections?: { kind: "builds_on" | "leads_to"; topic: string; why?: string }[] | null };
+
+/**
+ * What changes when topic `from` is merged into `into`: entries that mention it (topics and
+ * builds-on / leads-to), and the topic links (renamed; self-links dropped).
+ */
+export function mergeTopicPlan(entries: MergeEntry[], links: MapLink[], from: string, into: string) {
+  const f = norm(from);
+  const swap = (t: string) => (norm(t) === f ? into : t);
+  const uniq = (ts: string[]) => [...new Map(ts.map((t) => [norm(t), t])).values()];
+  const entryUpdates = entries
+    .filter((e) => (e.topics ?? []).some((t) => norm(t) === f) || (e.connections ?? []).some((c) => norm(c.topic) === f))
+    .map((e) => {
+      const topics = uniq((e.topics ?? []).map(swap));
+      const own = new Set(topics.map(norm));
+      const seen = new Set<string>();
+      const connections = (e.connections ?? [])
+        .map((c) => ({ ...c, topic: swap(c.topic) }))
+        .filter((c) => !own.has(norm(c.topic)) && !seen.has(`${c.kind}:${norm(c.topic)}`) && seen.add(`${c.kind}:${norm(c.topic)}`));
+      return { id: e.id, topics, connections };
+    });
+  const touched = links.filter((l) => norm(l.from_topic) === f || norm(l.to_topic) === f);
+  const seen = new Set(links.filter((l) => !touched.includes(l)).map((l) => `${norm(l.from_topic)}>${norm(l.to_topic)}`));
+  const linkInserts: MapLink[] = [];
+  for (const l of touched) {
+    const next = { ...l, from_topic: swap(l.from_topic), to_topic: swap(l.to_topic) };
+    const key = `${norm(next.from_topic)}>${norm(next.to_topic)}`;
+    if (norm(next.from_topic) === norm(next.to_topic) || seen.has(key)) continue;
+    seen.add(key);
+    linkInserts.push(next);
+  }
+  return { entryUpdates, linkDeletes: touched.map((l) => ({ from_topic: l.from_topic, to_topic: l.to_topic })), linkInserts };
 }

@@ -13,6 +13,7 @@ import { useAddFact, useDeleteFact, useFacts, useLearnNow, useMemoryAction, useU
 import { useUpdateProfile } from "@/lib/queries/profile";
 import type { Profile } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
+import { EditButton } from "@/components/ui/edit-button";
 
 const iconBtn = "flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-panel-hover hover:text-fg";
 
@@ -87,6 +88,7 @@ function FactRow({ fact }: { fact: Fact }) {
           {fact.last_seen_at ? <span>· {timeAgo(fact.last_seen_at)}</span> : null}
         </div>
       </div>
+      {!editing ? <EditButton label="Edit" onClick={() => (setText(fact.statement), setEditing(true))} className="p-1.5" /> : null}
       {!editing ? (
         <Menu
           label="Edit, pin or remove"
