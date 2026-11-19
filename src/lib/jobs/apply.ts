@@ -205,6 +205,100 @@ export function greenhouseFields(questions: GhQuestion[]): FormField[] {
   return out;
 }
 
+const yesNo = (options: string[]) => options.length === 2 && options.every((o) => /^(yes|no)$/i.test(o));
+
+/** jobs.ashbyhq.com/{board}/{uuid} */
+export function parseAshbyUrl(url: string | null | undefined): { board: string; id: string } | null {
+  const m = (url ?? "").match(/jobs\.ashbyhq\.com\/([^/?#]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  return m ? { board: decodeURIComponent(m[1]), id: m[2].toLowerCase() } : null;
+}
+
+/** jobs.lever.co/{site}/{uuid} (also jobs.eu.lever.co) */
+export function parseLeverUrl(url: string | null | undefined): { site: string; id: string; eu: boolean } | null {
+  const m = (url ?? "").match(/jobs\.(eu\.)?lever\.co\/([^/?#]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  return m ? { site: decodeURIComponent(m[2]), id: m[3].toLowerCase(), eu: !!m[1] } : null;
+}
+
+type AshbyEntry = { id?: string; isRequired?: boolean; field?: null | { path?: string; title?: string; type?: string; selectableValues?: { label?: string; value?: string }[] | null } };
+
+/** Ashby's application form (from its public job board API) → our form fields. */
+export function ashbyFields(sections: { fieldEntries?: AshbyEntry[] | null }[] | null | undefined): FormField[] {
+  const out: FormField[] = [];
+  for (const section of sections ?? []) {
+    for (const [i, e] of (section.fieldEntries ?? []).entries()) {
+      const f = e.field;
+      if (!f?.title) continue;
+      const options = (f.selectableValues ?? []).map((v) => String(v.label ?? v.value ?? "")).filter(Boolean);
+      const t = (f.type ?? "String").toLowerCase();
+      const type: FieldType =
+        t === "file"
+          ? "file"
+          : t === "longtext"
+            ? "textarea"
+            : t === "boolean"
+              ? "yesno"
+              : t === "multivalueselect"
+                ? "multiselect"
+                : t === "valueselect"
+                  ? yesNo(options)
+                    ? "yesno"
+                    : "select"
+                  : "text";
+      out.push({ id: `ab-${f.path ?? e.id ?? i}`, label: f.title.trim(), type, required: !!e.isRequired, options: options.length ? options : undefined });
+    }
+  }
+  return out;
+}
+
+const decodeAttr = (s: string) =>
+  s
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+
+/** Lever's apply page → our form fields: its standard fields plus the company's custom questions. */
+export function leverFields(html: string): FormField[] {
+  const out: FormField[] = [];
+  const has = (name: string) => new RegExp(`name=["']${name.replace(/[[\]]/g, "\\$&")}["']`, "i").test(html);
+  const std: [string, FormField][] = [
+    ["resume", { id: "lv-resume", label: "Resume / CV", type: "file", required: true }],
+    ["name", { id: "lv-name", label: "Full name", type: "text", required: true }],
+    ["email", { id: "lv-email", label: "Email", type: "text", required: true }],
+    ["phone", { id: "lv-phone", label: "Phone number", type: "text", required: false }],
+    ["location", { id: "lv-location", label: "Current location", type: "text", required: false }],
+    ["org", { id: "lv-org", label: "Current company", type: "text", required: false }],
+    ["urls[LinkedIn]", { id: "lv-linkedin", label: "LinkedIn profile", type: "text", required: false }],
+    ["urls[GitHub]", { id: "lv-github", label: "GitHub", type: "text", required: false }],
+    ["urls[Portfolio]", { id: "lv-portfolio", label: "Portfolio", type: "text", required: false }],
+  ];
+  for (const [name, field] of std) if (has(name)) out.push(field);
+  // Custom questions: each card's template is JSON in a hidden input.
+  const attr = (tag: string, name: string) => tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i"));
+  for (const [tag] of html.matchAll(/<input\b[^>]*>/gi)) {
+    const nameAttr = attr(tag, "name");
+    const card = (nameAttr?.[1] ?? nameAttr?.[2] ?? "").match(/^cards\[([^\]]+)\]\[baseTemplate\]$/);
+    if (!card) continue;
+    const value = attr(tag, "value");
+    try {
+      const tpl = JSON.parse(decodeAttr(value?.[1] ?? value?.[2] ?? "")) as { fields?: { type?: string; text?: string; required?: boolean; options?: { text?: string }[] }[] };
+      (tpl.fields ?? []).forEach((f, i) => {
+        if (!f.text) return;
+        const options = (f.options ?? []).map((o) => String(o.text ?? "")).filter(Boolean);
+        const t = f.type ?? "text";
+        const type: FieldType =
+          t === "file-upload" ? "file" : t === "textarea" ? "textarea" : t === "multiple-select" ? "multiselect" : t === "multiple-choice" || t === "dropdown" ? (yesNo(options) ? "yesno" : "select") : "text";
+        out.push({ id: `lv-${card[1]}-${i}`, label: f.text.trim(), type, required: !!f.required, options: options.length ? options : undefined });
+      });
+    } catch {
+      // unreadable card: skip it
+    }
+  }
+  if (has("comments")) out.push({ id: "lv-comments", label: "Additional information", type: "textarea", required: false });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Reply emails → application status (rules only; emails are never sent to an AI)
 // ---------------------------------------------------------------------------

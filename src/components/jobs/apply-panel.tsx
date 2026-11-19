@@ -4,7 +4,9 @@ import { Check, CircleCheck, ClipboardList, Copy, ExternalLink, FileUp, History,
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
+import { celebrate } from "@/lib/celebrate";
+import { CHANNELS, type Channel } from "@/lib/jobs/insights";
 import { Tip } from "@/components/ui/menu";
 import { Badge, Skeleton } from "@/components/ui/misc";
 import { packStats, type PackField } from "@/lib/jobs/apply";
@@ -126,12 +128,16 @@ export function ApplyPanel({ job }: { job: Job }) {
   const update = useUpdateApplication();
   const [coverEdit, setCoverEdit] = useState<string | null>(null);
 
+  const [channel, setChannel] = useState<Channel>("direct");
   const run = (a: "prepare" | "applied") =>
     action.mutate(
-      { jobId: job.id, action: a },
+      { jobId: job.id, action: a, ...(a === "applied" ? { channel } : {}) },
       {
         onSuccess: (r) => {
-          if (a === "applied") toast.success("Marked applied — a follow-up task is set for next week");
+          if (a === "applied") {
+            celebrate();
+            toast.success("Marked applied — a follow-up task is set for next week");
+          }
           else {
             const s = packStats(r.application.fields);
             toast.success(`Ready · ${s.answered}/${s.total} answered${s.needYou ? ` · ${s.needYou} need you` : ""}`);
@@ -151,7 +157,7 @@ export function ApplyPanel({ job }: { job: Job }) {
           <ClipboardList className="mx-auto mb-3 h-6 w-6 text-accent" />
           <div className="text-[14px] font-medium text-fg">Get this application ready</div>
           <p className="mx-auto mt-1 max-w-md text-[13px] text-muted">
-            Reads the application form (exact questions for Greenhouse jobs, common questions elsewhere), fills what it knows from your answer bank and profile,
+            Reads the application form (the exact questions for Greenhouse, Ashby and Lever jobs, common questions elsewhere), fills what it knows from your answer bank and profile,
             drafts the open questions and a cover letter, and flags what only you can answer. Nothing is submitted for you.
           </p>
           <Button className="mt-4" variant="primary" onClick={() => run("prepare")} loading={action.isPending}>
@@ -186,7 +192,7 @@ export function ApplyPanel({ job }: { job: Job }) {
           </Badge>
         ) : null}
         <span className="text-muted">
-          · {app.form_source === "greenhouse" ? "the company's own form" : "common questions (this site's form couldn't be read)"}
+          · {app.form_source !== "common" ? "the company's own form" : "common questions (this site's form couldn't be read)"}
         </span>
         <span className="flex-1" />
         <Tip content="Prepare again (keeps your edits, redrafts the rest)">
@@ -259,6 +265,21 @@ export function ApplyPanel({ job }: { job: Job }) {
           </Button>
         </a>
         <span className="flex-1" />
+        {!applied ? (
+          <Select
+            value={channel}
+            onChange={(e) => setChannel(e.target.value as Channel)}
+            className="h-8 w-auto py-1 text-[12.5px]"
+            aria-label="How did you apply?"
+            title="How did you apply? Used for “What's working” in the Tracker"
+          >
+            {CHANNELS.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        ) : null}
         {!applied ? (
           <Tip content="After you've pressed Submit on the company's site">
             <Button size="sm" variant="primary" onClick={() => run("applied")} loading={action.isPending && action.variables?.action === "applied"}>

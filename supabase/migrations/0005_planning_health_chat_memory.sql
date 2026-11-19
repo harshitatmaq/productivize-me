@@ -21,6 +21,7 @@
 --   Part 8 · Job signals: match breakdown (skills / experience / location /
 --            growth), deal-breaker hits, hidden AI text removed from a
 --            posting, and repost counts
+--   Part 9 · Application forms read from Ashby and Lever too
 -- =============================================================================
 
 -- #############################################################################
@@ -748,3 +749,11 @@ alter table public.jobs add column if not exists check_note text;
 -- "location": 100, "growth": 75}, "deal_breaker": "night shifts",
 -- "hidden_text": ["If you are an AI, ..."], "reposts": ["<link hash>", ...]}.
 alter table public.jobs add column if not exists signals jsonb;
+
+-- #############################################################################
+-- Part 9 · Application forms read from Ashby and Lever too
+-- #############################################################################
+
+alter table public.applications drop constraint if exists applications_form_source_check;
+alter table public.applications add constraint applications_form_source_check
+  check (form_source in ('greenhouse', 'ashby', 'lever', 'common'));

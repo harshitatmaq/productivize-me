@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { preparePack } from "@/lib/jobs/apply-server";
 import { localDayHour } from "@/lib/jobs/liveness";
+import { applicationInsights, weeklyLine, type InsightJob, type Insights } from "@/lib/jobs/insights";
 import { sweepJobs } from "@/lib/jobs/liveness-run";
 import { learnPreferences } from "@/lib/memory/personal";
 import { refreshMemory } from "@/lib/memory/refresh";
@@ -509,12 +510,34 @@ async function periodReview(
   const label = kind === "week" ? "week" : new Date(`${from}T12:00:00Z`).toLocaleDateString("en-US", { month: "long" });
   const summary = `${completed ?? 0} tasks done (${rate}%) · learned on ${days} day${days === 1 ? "" : "s"} · ${applied ?? 0} applications`;
 
+  // Job search: what's working (reply rates, quiet applications), from your own applications.
+  let jobLine: string | null = null;
+  let jobInsights: Insights | null = null;
+  if (kind === "week") {
+    try {
+      const [{ data: appliedJobs }, { data: apps }] = await Promise.all([
+        admin.from("jobs").select("id, title, company, status, source, score, applied_at").eq("user_id", p.id).in("status", ["applied", "interviewing", "offer", "rejected"]).limit(1000),
+        admin.from("applications").select("job_id, applied_at, timeline, channel:submitted->>channel, resume_name:resume->>name").eq("user_id", p.id).limit(1000),
+      ]);
+      if (appliedJobs?.length) {
+        jobInsights = applicationInsights(
+          appliedJobs as InsightJob[],
+          ((apps ?? []) as { job_id: string; applied_at: string | null; timeline: { at: string; kind: string }[] | null; channel: string | null; resume_name: string | null }[]).map((a) => ({ ...a, tailored: !!a.resume_name })),
+          Date.now(),
+        );
+        jobLine = weeklyLine(jobInsights);
+      }
+    } catch (e) {
+      console.warn("[tick] job insights skipped:", (e as Error).message);
+    }
+  }
+
   const wantsEmail = p.email_weekly_review && p.notify_email;
   const r = await notify(p, {
     kind: kind === "week" ? "weekly" : "monthly",
     dedupeKey: key,
     title: kind === "week" ? "🗓️ Your week in review" : `🗓️ ${label} in review`,
-    body: `${summary}. ${kind === "week" ? "Plan next week?" : "Set goals for this month?"}`,
+    body: `${summary}. ${jobLine ? `${jobLine}. ` : ""}${kind === "week" ? "Plan next week?" : "Set goals for this month?"}`,
     url: kind === "week" ? "/upcoming" : "/calendar",
     push: { tag: key },
     email: wantsEmail
@@ -542,7 +565,16 @@ async function periodReview(
                   ...(topTags.length ? [{ text: topTags.join("  ") }] : []),
                 ],
               },
-              { heading: "Job search", items: [{ text: `${matches ?? 0} strong matches found` }, { text: `${applied ?? 0} applications sent` }] },
+              {
+                heading: "Job search",
+                items: [
+                  { text: `${matches ?? 0} strong matches found` },
+                  { text: `${applied ?? 0} applications sent` },
+                  ...(jobInsights?.replyRate != null ? [{ text: `${jobInsights.replyRate}% of applications got a reply`, meta: `${jobInsights.interviews} interview${jobInsights.interviews === 1 ? "" : "s"} so far` }] : []),
+                  ...(jobInsights?.quiet.length ? [{ text: `${jobInsights.quiet.length} quiet for 10+ days — worth a follow-up`, meta: jobInsights.quiet.slice(0, 3).map((q) => q.company ?? q.title).join(", ") }] : []),
+                  ...(jobInsights?.tip ? [{ text: jobInsights.tip }] : []),
+                ],
+              },
             ],
             cta: { label: kind === "week" ? "Plan next week" : "Open calendar", href: kind === "week" ? "/upcoming" : "/calendar" },
           }),
